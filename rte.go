@@ -11,21 +11,15 @@ import (
 	"strings"
 )
 
-// Table manages the routing table and a default handler
-type Table struct {
-	m       map[string]*node
-	Default http.Handler
+// Func routes requests matching the method and path to a handler
+func Func(method, path string, f func(http.ResponseWriter, *http.Request)) Route {
+	return Route{Method: method, Path: path, Handler: http.HandlerFunc(f)}
 }
 
 // Route is data for routing to a handler
 type Route struct {
 	Method, Path string
 	Handler      http.Handler
-}
-
-// Func routes requests matching the method and path to a handler
-func Func(method, path string, f func(http.ResponseWriter, *http.Request)) Route {
-	return Route{Method: method, Path: path, Handler: http.HandlerFunc(f)}
 }
 
 // Must builds routes into a Table and panics if there's an error
@@ -84,32 +78,37 @@ func New(routes ...Route) (*Table, error) {
 	return t, nil
 }
 
-func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if h, params := t.match(r.Method, r.URL.Path); h != nil {
-		*r = *r.WithContext(context.WithValue(r.Context(), pathVarKey, params))
-		h.ServeHTTP(w, r)
-		return
-	}
-	t.Default.ServeHTTP(w, r)
+// Table manages the routing table and a default handler
+type Table struct {
+	m       map[string]*node
+	Default http.Handler
 }
 
-func (t *Table) match(method, path string) (http.Handler, []string) {
-	if t.m[method] == nil {
-		return nil, nil
+func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if t.m[r.Method] == nil {
+		t.Default.ServeHTTP(w, r)
+		return
 	}
 
-	n := t.m[method]
-	var matched []string
-	for _, seg := range strings.SplitAfter(path, "/")[1:] {
+	n := t.m[r.Method]
+	var params []string
+	for _, seg := range strings.SplitAfter(r.URL.Path, "/")[1:] {
 		var m string
 		if m, n = n.match(seg); n == nil {
-			return nil, nil
+			t.Default.ServeHTTP(w, r)
+			return
 		} else if m != "" {
-			matched = append(matched, m)
+			params = append(params, m)
 		}
 	}
 
-	return n.h, matched
+	if n.h == nil {
+		t.Default.ServeHTTP(w, r)
+		return
+	}
+
+	*r = *r.WithContext(context.WithValue(r.Context(), pathVarKey, params))
+	n.h.ServeHTTP(w, r)
 }
 
 // PathVars returns the values for any matched wildcards in the order they were found
