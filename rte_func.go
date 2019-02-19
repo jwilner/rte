@@ -4,15 +4,29 @@ package rte
 
 import (
 	"net/http"
+
+	"strconv"
 )
 
-func Func1(method, path string, f func(w http.ResponseWriter, r *http.Request, p0 string)) Route {
-	return Wrap(method, path, func1(f))
+func FuncS1(
+	method,
+	path string,
+	f func(
+		w http.ResponseWriter,
+		r *http.Request,
+		s0 string,
+	),
+) Route {
+	return Wrap(method, path, funcS1(f))
 }
 
-type func1 func(w http.ResponseWriter, r *http.Request, p0 string)
+type funcS1 func(
+	w http.ResponseWriter,
+	r *http.Request,
+	s0 string,
+)
 
-func (f func1) Wrap(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcS1) Wrap(segIdxes []int) (http.HandlerFunc, error) {
 	if len(segIdxes) != 1 {
 		return nil, WrongNumParams
 	}
@@ -20,17 +34,34 @@ func (f func1) Wrap(segIdxes []int) (http.HandlerFunc, error) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var segs [1]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
-		f(w, r, segs[0])
+
+		f(
+			w,
+			r,
+			segs[0],
+		)
 	}, nil
 }
 
-func Func2(method, path string, f func(w http.ResponseWriter, r *http.Request, p0, p1 string)) Route {
-	return Wrap(method, path, func2(f))
+func FuncS2(
+	method,
+	path string,
+	f func(
+		w http.ResponseWriter,
+		r *http.Request,
+		s0, s1 string,
+	),
+) Route {
+	return Wrap(method, path, funcS2(f))
 }
 
-type func2 func(w http.ResponseWriter, r *http.Request, p0, p1 string)
+type funcS2 func(
+	w http.ResponseWriter,
+	r *http.Request,
+	s0, s1 string,
+)
 
-func (f func2) Wrap(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcS2) Wrap(segIdxes []int) (http.HandlerFunc, error) {
 	if len(segIdxes) != 2 {
 		return nil, WrongNumParams
 	}
@@ -38,17 +69,36 @@ func (f func2) Wrap(segIdxes []int) (http.HandlerFunc, error) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
-		f(w, r, segs[0], segs[1])
+
+		f(
+			w,
+			r,
+			segs[0],
+
+			segs[1],
+		)
 	}, nil
 }
 
-func Func3(method, path string, f func(w http.ResponseWriter, r *http.Request, p0, p1, p2 string)) Route {
-	return Wrap(method, path, func3(f))
+func FuncS3(
+	method,
+	path string,
+	f func(
+		w http.ResponseWriter,
+		r *http.Request,
+		s0, s1, s2 string,
+	),
+) Route {
+	return Wrap(method, path, funcS3(f))
 }
 
-type func3 func(w http.ResponseWriter, r *http.Request, p0, p1, p2 string)
+type funcS3 func(
+	w http.ResponseWriter,
+	r *http.Request,
+	s0, s1, s2 string,
+)
 
-func (f func3) Wrap(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcS3) Wrap(segIdxes []int) (http.HandlerFunc, error) {
 	if len(segIdxes) != 3 {
 		return nil, WrongNumParams
 	}
@@ -56,42 +106,342 @@ func (f func3) Wrap(segIdxes []int) (http.HandlerFunc, error) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var segs [3]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
-		f(w, r, segs[0], segs[1], segs[2])
+
+		f(
+			w,
+			r,
+			segs[0],
+
+			segs[1],
+
+			segs[2],
+		)
 	}, nil
 }
 
-func Func4(method, path string, f func(w http.ResponseWriter, r *http.Request, p0, p1, p2, p3 string)) Route {
-	return Wrap(method, path, func4(f))
+func FuncI1(
+	method,
+	path string,
+	f func(
+		w http.ResponseWriter,
+		r *http.Request,
+		i0 int64,
+	),
+) Route {
+	return Wrap(method, path, funcI1(f))
 }
 
-type func4 func(w http.ResponseWriter, r *http.Request, p0, p1, p2, p3 string)
+type funcI1 func(
+	w http.ResponseWriter,
+	r *http.Request,
+	i0 int64,
+)
 
-func (f func4) Wrap(segIdxes []int) (http.HandlerFunc, error) {
-	if len(segIdxes) != 4 {
+func (f funcI1) Wrap(segIdxes []int) (http.HandlerFunc, error) {
+	if len(segIdxes) != 1 {
 		return nil, WrongNumParams
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		var segs [4]string
+		var segs [1]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
-		f(w, r, segs[0], segs[1], segs[2], segs[3])
+
+		i0, err := strconv.ParseInt(segs[0], 10, 64)
+		if err != nil {
+			panic(err)
+		}
+
+		f(
+			w,
+			r,
+			i0,
+		)
 	}, nil
 }
 
-func Func5(method, path string, f func(w http.ResponseWriter, r *http.Request, p0, p1, p2, p3, p4 string)) Route {
-	return Wrap(method, path, func5(f))
+func FuncI2(
+	method,
+	path string,
+	f func(
+		w http.ResponseWriter,
+		r *http.Request,
+		i0, i1 int64,
+	),
+) Route {
+	return Wrap(method, path, funcI2(f))
 }
 
-type func5 func(w http.ResponseWriter, r *http.Request, p0, p1, p2, p3, p4 string)
+type funcI2 func(
+	w http.ResponseWriter,
+	r *http.Request,
+	i0, i1 int64,
+)
 
-func (f func5) Wrap(segIdxes []int) (http.HandlerFunc, error) {
-	if len(segIdxes) != 5 {
+func (f funcI2) Wrap(segIdxes []int) (http.HandlerFunc, error) {
+	if len(segIdxes) != 2 {
 		return nil, WrongNumParams
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		var segs [5]string
+		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
-		f(w, r, segs[0], segs[1], segs[2], segs[3], segs[4])
+
+		i0, err := strconv.ParseInt(segs[0], 10, 64)
+		if err != nil {
+			panic(err)
+		}
+
+		i1, err := strconv.ParseInt(segs[1], 10, 64)
+		if err != nil {
+			panic(err)
+		}
+
+		f(
+			w,
+			r,
+			i0,
+			i1,
+		)
+	}, nil
+}
+
+func FuncI3(
+	method,
+	path string,
+	f func(
+		w http.ResponseWriter,
+		r *http.Request,
+		i0, i1, i2 int64,
+	),
+) Route {
+	return Wrap(method, path, funcI3(f))
+}
+
+type funcI3 func(
+	w http.ResponseWriter,
+	r *http.Request,
+	i0, i1, i2 int64,
+)
+
+func (f funcI3) Wrap(segIdxes []int) (http.HandlerFunc, error) {
+	if len(segIdxes) != 3 {
+		return nil, WrongNumParams
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		var segs [3]string
+		findNSegments(r.URL.Path, segIdxes[:], segs[:])
+
+		i0, err := strconv.ParseInt(segs[0], 10, 64)
+		if err != nil {
+			panic(err)
+		}
+
+		i1, err := strconv.ParseInt(segs[1], 10, 64)
+		if err != nil {
+			panic(err)
+		}
+
+		i2, err := strconv.ParseInt(segs[2], 10, 64)
+		if err != nil {
+			panic(err)
+		}
+
+		f(
+			w,
+			r,
+			i0,
+			i1,
+			i2,
+		)
+	}, nil
+}
+
+func FuncU1(
+	method,
+	path string,
+	f func(
+		w http.ResponseWriter,
+		r *http.Request,
+		u0 uint64,
+	),
+) Route {
+	return Wrap(method, path, funcU1(f))
+}
+
+type funcU1 func(
+	w http.ResponseWriter,
+	r *http.Request,
+	u0 uint64,
+)
+
+func (f funcU1) Wrap(segIdxes []int) (http.HandlerFunc, error) {
+	if len(segIdxes) != 1 {
+		return nil, WrongNumParams
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		var segs [1]string
+		findNSegments(r.URL.Path, segIdxes[:], segs[:])
+
+		u0, err := strconv.ParseUint(segs[0], 10, 64)
+		if err != nil {
+			panic(err)
+		}
+
+		f(
+			w,
+			r,
+			u0,
+		)
+	}, nil
+}
+
+func FuncU2(
+	method,
+	path string,
+	f func(
+		w http.ResponseWriter,
+		r *http.Request,
+		u0, u1 uint64,
+	),
+) Route {
+	return Wrap(method, path, funcU2(f))
+}
+
+type funcU2 func(
+	w http.ResponseWriter,
+	r *http.Request,
+	u0, u1 uint64,
+)
+
+func (f funcU2) Wrap(segIdxes []int) (http.HandlerFunc, error) {
+	if len(segIdxes) != 2 {
+		return nil, WrongNumParams
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		var segs [2]string
+		findNSegments(r.URL.Path, segIdxes[:], segs[:])
+
+		u0, err := strconv.ParseUint(segs[0], 10, 64)
+		if err != nil {
+			panic(err)
+		}
+
+		u1, err := strconv.ParseUint(segs[1], 10, 64)
+		if err != nil {
+			panic(err)
+		}
+
+		f(
+			w,
+			r,
+			u0,
+			u1,
+		)
+	}, nil
+}
+
+func FuncU3(
+	method,
+	path string,
+	f func(
+		w http.ResponseWriter,
+		r *http.Request,
+		u0, u1, u2 uint64,
+	),
+) Route {
+	return Wrap(method, path, funcU3(f))
+}
+
+type funcU3 func(
+	w http.ResponseWriter,
+	r *http.Request,
+	u0, u1, u2 uint64,
+)
+
+func (f funcU3) Wrap(segIdxes []int) (http.HandlerFunc, error) {
+	if len(segIdxes) != 3 {
+		return nil, WrongNumParams
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		var segs [3]string
+		findNSegments(r.URL.Path, segIdxes[:], segs[:])
+
+		u0, err := strconv.ParseUint(segs[0], 10, 64)
+		if err != nil {
+			panic(err)
+		}
+
+		u1, err := strconv.ParseUint(segs[1], 10, 64)
+		if err != nil {
+			panic(err)
+		}
+
+		u2, err := strconv.ParseUint(segs[2], 10, 64)
+		if err != nil {
+			panic(err)
+		}
+
+		f(
+			w,
+			r,
+			u0,
+			u1,
+			u2,
+		)
+	}, nil
+}
+
+func FuncS1I2(
+	method,
+	path string,
+	f func(
+		w http.ResponseWriter,
+		r *http.Request,
+		s0 string,
+
+		i1, i2 int64,
+	),
+) Route {
+	return Wrap(method, path, funcS1I2(f))
+}
+
+type funcS1I2 func(
+	w http.ResponseWriter,
+	r *http.Request,
+	s0 string,
+	i1, i2 int64,
+)
+
+func (f funcS1I2) Wrap(segIdxes []int) (http.HandlerFunc, error) {
+	if len(segIdxes) != 3 {
+		return nil, WrongNumParams
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		var segs [3]string
+		findNSegments(r.URL.Path, segIdxes[:], segs[:])
+
+		i1, err := strconv.ParseInt(segs[1], 10, 64)
+		if err != nil {
+			panic(err)
+		}
+
+		i2, err := strconv.ParseInt(segs[2], 10, 64)
+		if err != nil {
+			panic(err)
+		}
+
+		f(
+			w,
+			r,
+			segs[0],
+
+			i1,
+			i2,
+		)
 	}, nil
 }

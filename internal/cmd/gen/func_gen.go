@@ -2,22 +2,24 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"go/format"
 	"log"
 	"os"
+	"sort"
 	"text/template"
 )
 
 type (
 	paramType struct {
-		Name string
+		Name    string
+		Conv    [2]string
+		Imports []string
 	}
 
 	sig struct {
+		FuncName string
 		TypeName string
 		Params   []param
-		FuncName string
 	}
 
 	param struct {
@@ -36,6 +38,16 @@ var (
 	stringParamType = paramType{
 		Name: "string",
 	}
+	int64ParamType = paramType{
+		Name:    "int64",
+		Conv:    [2]string{"strconv.ParseInt(", ", 10, 64)"},
+		Imports: []string{"strconv"},
+	}
+	uint64ParamType = paramType{
+		Name:    "uint64",
+		Conv:    [2]string{"strconv.ParseUint(", ", 10, 64)"},
+		Imports: []string{"strconv"},
+	}
 
 	tmpl = template.Must(template.New("").Parse(`
 // generate handler wrappers which avoid allocs
@@ -43,15 +55,33 @@ var (
 package rte
 
 import (
-	"net/http"
+{{ range $imp := .Imports }}
+	"{{ $imp }}"
+{{ end }}
 )
 
 {{ range $sig := .Sigs }}
-func {{ $sig.FuncName }}(method, path string, f func(w http.ResponseWriter, r *http.Request {{- range $g := $sig.ParamGroups }}{{- range $p := $g.Names -}}, {{ $p }}{{- end }} {{$g.Type.Name}}{{end}})) Route {
+func {{ $sig.FuncName }}(
+	method,
+	path string,
+	f func(
+		w http.ResponseWriter,
+		r *http.Request,
+		{{- range $g := $sig.ParamGroups }}
+		{{ range $idx, $p := $g.Names -}}{{ if $idx }}, {{end}}{{ $p }}{{- end }} {{$g.Type.Name}},
+		{{end -}}
+	),
+) Route {
 	return Wrap(method, path, {{ $sig.TypeName }}(f))
 }
 
-type {{ $sig.TypeName }} func(w http.ResponseWriter, r *http.Request{{- range $g := $sig.ParamGroups }}{{- range $p := $g.Names -}}, {{ $p }}{{- end }} {{$g.Type.Name}}{{end}})
+type {{ $sig.TypeName }} func(
+	w http.ResponseWriter,
+	r *http.Request,
+	{{ range $g := $sig.ParamGroups }}
+	{{- range $idx, $p := $g.Names -}}{{if $idx }}, {{end}}{{ $p }}{{- end }} {{$g.Type.Name}},
+	{{end -}}
+)
 
 func (f {{ $sig.TypeName }}) Wrap(segIdxes []int) (http.HandlerFunc, error) {
 	if len(segIdxes) != {{ len $sig.Params }} {
@@ -61,7 +91,25 @@ func (f {{ $sig.TypeName }}) Wrap(segIdxes []int) (http.HandlerFunc, error) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var segs [{{ len $sig.Params }}]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
-		f(w, r{{- range $idx, $_ := $sig.Params -}}, segs[{{ $idx }}]{{- end }})
+		{{- range $idx, $p := $sig.Params }}
+		{{ if index $p.Type.Conv 0 }}
+		{{$p.Name}}, err := {{ index $p.Type.Conv 0 }}segs[{{ $idx }}]{{ index $p.Type.Conv 1 }}
+		if err != nil {
+			panic(err)
+		}
+		{{ end }}
+		{{ end }}
+		f(
+			w,
+			r,
+			{{- range $idx, $p := $sig.Params -}}
+			{{- if index $p.Type.Conv 0 }}
+			{{ $p.Name }},
+			{{- else }}
+			segs[{{ $idx }}],
+			{{ end }}
+			{{- end }}
+		)
 	}, nil
 }
 {{ end }}
@@ -76,7 +124,7 @@ func (s sig) ParamGroups() []paramGroup {
 			cur.Type = p.Type
 		}
 
-		if cur.Type != p.Type {
+		if cur.Type.Name != p.Type.Name {
 			grps = append(grps, cur)
 			cur = paramGroup{Type: p.Type}
 		}
@@ -87,24 +135,80 @@ func (s sig) ParamGroups() []paramGroup {
 }
 
 func main() {
-	var sigs []sig
-	for i := 0; i < 5; i++ {
-		nargs := i + 1
-		s := sig{
-			FuncName: fmt.Sprintf("Func%d", nargs),
-			TypeName: fmt.Sprintf("func%d", nargs),
+	var sigs = []sig{
+		{
+			"FuncS1",
+			"funcS1",
+			[]param{{"s0", stringParamType}},
+		},
+		{
+			"FuncS2",
+			"funcS2",
+			[]param{{"s0", stringParamType}, {"s1", stringParamType}},
+		},
+		{
+			"FuncS3",
+			"funcS3",
+			[]param{{"s0", stringParamType}, {"s1", stringParamType}, {"s2", stringParamType}},
+		},
+		{
+			"FuncI1",
+			"funcI1",
+			[]param{{"i0", int64ParamType}},
+		},
+		{
+			"FuncI2",
+			"funcI2",
+			[]param{{"i0", int64ParamType}, {"i1", int64ParamType}},
+		},
+		{
+			"FuncI3",
+			"funcI3",
+			[]param{{"i0", int64ParamType}, {"i1", int64ParamType}, {"i2", int64ParamType}},
+		},
+		{
+			"FuncU1",
+			"funcU1",
+			[]param{{"u0", uint64ParamType}},
+		},
+		{
+			"FuncU2",
+			"funcU2",
+			[]param{{"u0", uint64ParamType}, {"u1", uint64ParamType}},
+		},
+		{
+			"FuncU3",
+			"funcU3",
+			[]param{{"u0", uint64ParamType}, {"u1", uint64ParamType}, {"u2", uint64ParamType}},
+		},
+		{
+			"FuncS1I2",
+			"funcS1I2",
+			[]param{{"s0", stringParamType}, {"i1", int64ParamType}, {"i2", int64ParamType}},
+		},
+	}
+
+	imports := []string{"net/http"}
+	{
+		seen := make(map[string]bool)
+		for _, sig := range sigs {
+			for _, p := range sig.Params {
+				for _, i := range p.Type.Imports {
+					if !seen[i] {
+						seen[i] = true
+						imports = append(imports, i)
+					}
+				}
+			}
 		}
-		for j := 0; j < nargs; j++ {
-			s.Params = append(s.Params, param{
-				Name: fmt.Sprintf("p%d", j),
-				Type: stringParamType,
-			})
-		}
-		sigs = append(sigs, s)
+		sort.Strings(imports)
 	}
 
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, struct{ Sigs []sig }{sigs}); err != nil {
+	if err := tmpl.Execute(&buf, struct {
+		Sigs    []sig
+		Imports []string
+	}{sigs, imports}); err != nil {
 		log.Fatalf("tmpl.Execute: %v", err)
 	}
 

@@ -56,7 +56,7 @@ func Test_matchPath(t *testing.T) {
 		{
 			"wildcard-match",
 			httptest.NewRequest("GET", "/abc", nil),
-			rte.Func1("GET", "/:whoo", func(w http.ResponseWriter, r *http.Request, whoo string) {
+			rte.FuncS1("GET", "/:whoo", func(w http.ResponseWriter, r *http.Request, whoo string) {
 				_ = json.NewEncoder(w).Encode([]string{whoo})
 			}),
 			`["abc"]`,
@@ -64,7 +64,7 @@ func Test_matchPath(t *testing.T) {
 		{
 			"multiple-wildcard",
 			httptest.NewRequest("GET", "/abc/123", nil),
-			rte.Func2("GET", "/:foo/:bar", func(w http.ResponseWriter, r *http.Request, foo, bar string) {
+			rte.FuncS2("GET", "/:foo/:bar", func(w http.ResponseWriter, r *http.Request, foo, bar string) {
 				_ = json.NewEncoder(w).Encode([]string{foo, bar})
 			}),
 			`["abc","123"]`,
@@ -88,7 +88,7 @@ func Test_matchPath(t *testing.T) {
 
 func BenchmarkRoute(b *testing.B) {
 	tbl := rte.Must(
-		rte.Func1("GET", "/abc/:blah", func(w http.ResponseWriter, r *http.Request, blah string) {
+		rte.FuncS1("GET", "/abc/:blah", func(w http.ResponseWriter, r *http.Request, blah string) {
 		}),
 	)
 
