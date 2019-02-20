@@ -20,8 +20,9 @@ func FuncS1(
 		r *http.Request,
 		s0 string,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcS1(f))
+	return Bind(method, path, funcS1(f), middlewares...)
 }
 
 type funcS1 func(
@@ -30,12 +31,12 @@ type funcS1 func(
 	s0 string,
 )
 
-func (f funcS1) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcS1) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 1 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [1]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -44,7 +45,7 @@ func (f funcS1) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			r,
 			segs[0],
 		)
-	}, nil
+	}), nil
 }
 
 // FuncI1 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -58,8 +59,9 @@ func FuncI1(
 		r *http.Request,
 		i0 int64,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcI1(f))
+	return Bind(method, path, funcI1(f), middlewares...)
 }
 
 type funcI1 func(
@@ -68,12 +70,12 @@ type funcI1 func(
 	i0 int64,
 )
 
-func (f funcI1) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcI1) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 1 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [1]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -87,7 +89,7 @@ func (f funcI1) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			r,
 			i0,
 		)
-	}, nil
+	}), nil
 }
 
 // FuncH1 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -101,8 +103,9 @@ func FuncH1(
 		r *http.Request,
 		h0 int64,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcH1(f))
+	return Bind(method, path, funcH1(f), middlewares...)
 }
 
 type funcH1 func(
@@ -111,12 +114,12 @@ type funcH1 func(
 	h0 int64,
 )
 
-func (f funcH1) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcH1) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 1 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [1]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -130,7 +133,7 @@ func (f funcH1) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			r,
 			h0,
 		)
-	}, nil
+	}), nil
 }
 
 // FuncU1 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -144,8 +147,9 @@ func FuncU1(
 		r *http.Request,
 		u0 uint64,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcU1(f))
+	return Bind(method, path, funcU1(f), middlewares...)
 }
 
 type funcU1 func(
@@ -154,12 +158,12 @@ type funcU1 func(
 	u0 uint64,
 )
 
-func (f funcU1) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcU1) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 1 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [1]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -173,7 +177,7 @@ func (f funcU1) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			r,
 			u0,
 		)
-	}, nil
+	}), nil
 }
 
 // FuncS2 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -187,8 +191,9 @@ func FuncS2(
 		r *http.Request,
 		s0, s1 string,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcS2(f))
+	return Bind(method, path, funcS2(f), middlewares...)
 }
 
 type funcS2 func(
@@ -197,12 +202,12 @@ type funcS2 func(
 	s0, s1 string,
 )
 
-func (f funcS2) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcS2) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 2 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -213,7 +218,7 @@ func (f funcS2) Bind(segIdxes []int) (http.HandlerFunc, error) {
 
 			segs[1],
 		)
-	}, nil
+	}), nil
 }
 
 // FuncS1I1 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -230,8 +235,9 @@ func FuncS1I1(
 
 		i1 int64,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcS1I1(f))
+	return Bind(method, path, funcS1I1(f), middlewares...)
 }
 
 type funcS1I1 func(
@@ -241,12 +247,12 @@ type funcS1I1 func(
 	i1 int64,
 )
 
-func (f funcS1I1) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcS1I1) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 2 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -262,7 +268,7 @@ func (f funcS1I1) Bind(segIdxes []int) (http.HandlerFunc, error) {
 
 			i1,
 		)
-	}, nil
+	}), nil
 }
 
 // FuncS1H1 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -279,8 +285,9 @@ func FuncS1H1(
 
 		h1 int64,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcS1H1(f))
+	return Bind(method, path, funcS1H1(f), middlewares...)
 }
 
 type funcS1H1 func(
@@ -290,12 +297,12 @@ type funcS1H1 func(
 	h1 int64,
 )
 
-func (f funcS1H1) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcS1H1) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 2 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -311,7 +318,7 @@ func (f funcS1H1) Bind(segIdxes []int) (http.HandlerFunc, error) {
 
 			h1,
 		)
-	}, nil
+	}), nil
 }
 
 // FuncS1U1 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -328,8 +335,9 @@ func FuncS1U1(
 
 		u1 uint64,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcS1U1(f))
+	return Bind(method, path, funcS1U1(f), middlewares...)
 }
 
 type funcS1U1 func(
@@ -339,12 +347,12 @@ type funcS1U1 func(
 	u1 uint64,
 )
 
-func (f funcS1U1) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcS1U1) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 2 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -360,7 +368,7 @@ func (f funcS1U1) Bind(segIdxes []int) (http.HandlerFunc, error) {
 
 			u1,
 		)
-	}, nil
+	}), nil
 }
 
 // FuncI1S1 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -377,8 +385,9 @@ func FuncI1S1(
 
 		s1 string,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcI1S1(f))
+	return Bind(method, path, funcI1S1(f), middlewares...)
 }
 
 type funcI1S1 func(
@@ -388,12 +397,12 @@ type funcI1S1 func(
 	s1 string,
 )
 
-func (f funcI1S1) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcI1S1) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 2 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -408,7 +417,7 @@ func (f funcI1S1) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			i0,
 			segs[1],
 		)
-	}, nil
+	}), nil
 }
 
 // FuncI2 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -422,8 +431,9 @@ func FuncI2(
 		r *http.Request,
 		i0, i1 int64,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcI2(f))
+	return Bind(method, path, funcI2(f), middlewares...)
 }
 
 type funcI2 func(
@@ -432,12 +442,12 @@ type funcI2 func(
 	i0, i1 int64,
 )
 
-func (f funcI2) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcI2) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 2 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -457,7 +467,7 @@ func (f funcI2) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			i0,
 			i1,
 		)
-	}, nil
+	}), nil
 }
 
 // FuncI1H1 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -471,8 +481,9 @@ func FuncI1H1(
 		r *http.Request,
 		i0, h1 int64,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcI1H1(f))
+	return Bind(method, path, funcI1H1(f), middlewares...)
 }
 
 type funcI1H1 func(
@@ -481,12 +492,12 @@ type funcI1H1 func(
 	i0, h1 int64,
 )
 
-func (f funcI1H1) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcI1H1) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 2 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -506,7 +517,7 @@ func (f funcI1H1) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			i0,
 			h1,
 		)
-	}, nil
+	}), nil
 }
 
 // FuncI1U1 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -523,8 +534,9 @@ func FuncI1U1(
 
 		u1 uint64,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcI1U1(f))
+	return Bind(method, path, funcI1U1(f), middlewares...)
 }
 
 type funcI1U1 func(
@@ -534,12 +546,12 @@ type funcI1U1 func(
 	u1 uint64,
 )
 
-func (f funcI1U1) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcI1U1) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 2 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -559,7 +571,7 @@ func (f funcI1U1) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			i0,
 			u1,
 		)
-	}, nil
+	}), nil
 }
 
 // FuncH1S1 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -576,8 +588,9 @@ func FuncH1S1(
 
 		s1 string,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcH1S1(f))
+	return Bind(method, path, funcH1S1(f), middlewares...)
 }
 
 type funcH1S1 func(
@@ -587,12 +600,12 @@ type funcH1S1 func(
 	s1 string,
 )
 
-func (f funcH1S1) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcH1S1) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 2 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -607,7 +620,7 @@ func (f funcH1S1) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			h0,
 			segs[1],
 		)
-	}, nil
+	}), nil
 }
 
 // FuncH1I1 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -621,8 +634,9 @@ func FuncH1I1(
 		r *http.Request,
 		h0, i1 int64,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcH1I1(f))
+	return Bind(method, path, funcH1I1(f), middlewares...)
 }
 
 type funcH1I1 func(
@@ -631,12 +645,12 @@ type funcH1I1 func(
 	h0, i1 int64,
 )
 
-func (f funcH1I1) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcH1I1) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 2 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -656,7 +670,7 @@ func (f funcH1I1) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			h0,
 			i1,
 		)
-	}, nil
+	}), nil
 }
 
 // FuncH2 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -670,8 +684,9 @@ func FuncH2(
 		r *http.Request,
 		h0, h1 int64,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcH2(f))
+	return Bind(method, path, funcH2(f), middlewares...)
 }
 
 type funcH2 func(
@@ -680,12 +695,12 @@ type funcH2 func(
 	h0, h1 int64,
 )
 
-func (f funcH2) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcH2) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 2 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -705,7 +720,7 @@ func (f funcH2) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			h0,
 			h1,
 		)
-	}, nil
+	}), nil
 }
 
 // FuncH1U1 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -722,8 +737,9 @@ func FuncH1U1(
 
 		u1 uint64,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcH1U1(f))
+	return Bind(method, path, funcH1U1(f), middlewares...)
 }
 
 type funcH1U1 func(
@@ -733,12 +749,12 @@ type funcH1U1 func(
 	u1 uint64,
 )
 
-func (f funcH1U1) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcH1U1) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 2 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -758,7 +774,7 @@ func (f funcH1U1) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			h0,
 			u1,
 		)
-	}, nil
+	}), nil
 }
 
 // FuncU1S1 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -775,8 +791,9 @@ func FuncU1S1(
 
 		s1 string,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcU1S1(f))
+	return Bind(method, path, funcU1S1(f), middlewares...)
 }
 
 type funcU1S1 func(
@@ -786,12 +803,12 @@ type funcU1S1 func(
 	s1 string,
 )
 
-func (f funcU1S1) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcU1S1) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 2 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -806,7 +823,7 @@ func (f funcU1S1) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			u0,
 			segs[1],
 		)
-	}, nil
+	}), nil
 }
 
 // FuncU1I1 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -823,8 +840,9 @@ func FuncU1I1(
 
 		i1 int64,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcU1I1(f))
+	return Bind(method, path, funcU1I1(f), middlewares...)
 }
 
 type funcU1I1 func(
@@ -834,12 +852,12 @@ type funcU1I1 func(
 	i1 int64,
 )
 
-func (f funcU1I1) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcU1I1) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 2 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -859,7 +877,7 @@ func (f funcU1I1) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			u0,
 			i1,
 		)
-	}, nil
+	}), nil
 }
 
 // FuncU1H1 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -876,8 +894,9 @@ func FuncU1H1(
 
 		h1 int64,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcU1H1(f))
+	return Bind(method, path, funcU1H1(f), middlewares...)
 }
 
 type funcU1H1 func(
@@ -887,12 +906,12 @@ type funcU1H1 func(
 	h1 int64,
 )
 
-func (f funcU1H1) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcU1H1) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 2 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -912,7 +931,7 @@ func (f funcU1H1) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			u0,
 			h1,
 		)
-	}, nil
+	}), nil
 }
 
 // FuncU2 creates a route which matches the supplied method and path. In addition to a response writer, and
@@ -926,8 +945,9 @@ func FuncU2(
 		r *http.Request,
 		u0, u1 uint64,
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, funcU2(f))
+	return Bind(method, path, funcU2(f), middlewares...)
 }
 
 type funcU2 func(
@@ -936,12 +956,12 @@ type funcU2 func(
 	u0, u1 uint64,
 )
 
-func (f funcU2) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f funcU2) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 2 {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [2]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 
@@ -961,5 +981,5 @@ func (f funcU2) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			u0,
 			u1,
 		)
-	}, nil
+	}), nil
 }

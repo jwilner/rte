@@ -22,17 +22,17 @@ var (
 // Binder is the common interface which binding handlers have to fulfill
 type Binder interface {
 	// Bind is invoked with segment indexes corresponding to path wildcards and returns a handler or an error.
-	Bind(segIdxes []int) (http.HandlerFunc, error)
+	Bind(segIdxes []int) (http.Handler, error)
 }
 
 // Func routes requests matching the method and path to a handler
-func Func(method, path string, f http.HandlerFunc) Route {
-	return Bind(method, path, func0(f))
+func Func(method, path string, f http.HandlerFunc, middlewares ...Middleware) Route {
+	return Bind(method, path, func0(f), middlewares...)
 }
 
 type func0 http.HandlerFunc
 
-func (f func0) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f func0) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != 0 {
 		return nil, ErrWrongNumParams
 	}
@@ -40,14 +40,18 @@ func (f func0) Bind(segIdxes []int) (http.HandlerFunc, error) {
 }
 
 // Bind takes in a method, path, and a Binder and returns a route.
-func Bind(method, path string, f Binder) Route {
-	return Route{Method: method, Path: path, Handler: f}
+func Bind(method, path string, f Binder, middlewares ...Middleware) Route {
+	return Route{Method: method, Path: path, Handler: f, Middlewares: middlewares}
 }
+
+// Middleware is shorthand for a function which takes in a handler and returns another
+type Middleware = func(http.Handler) http.Handler
 
 // Route is data for routing to a handler
 type Route struct {
 	Method, Path string
 	Handler      Binder
+	Middlewares  []Middleware
 }
 
 // Must builds routes into a Table and panics if there's an error
@@ -111,6 +115,10 @@ func New(routes ...Route) (*Table, error) {
 		var err error
 		if n.h, err = r.Handler.Bind(paramPos); err != nil {
 			return nil, fmt.Errorf("route %v: invalid parameters: %v", i, err)
+		}
+
+		for i := len(r.Middlewares) - 1; i >= 0; i-- {
+			n.h = r.Middlewares[i](n.h)
 		}
 	}
 

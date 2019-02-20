@@ -37,8 +37,9 @@ func {{ $sig.FuncName }}(
 		{{ range $idx, $p := $g.Names -}}{{ if $idx }}, {{end}}{{ $p }}{{- end }} {{$g.Type.Name}},
 		{{end -}}
 	),
+	middlewares ...Middleware,
 ) Route {
-	return Bind(method, path, {{ $sig.TypeName }}(f))
+	return Bind(method, path, {{ $sig.TypeName }}(f), middlewares...)
 }
 
 type {{ $sig.TypeName }} func(
@@ -49,12 +50,12 @@ type {{ $sig.TypeName }} func(
 	{{end -}}
 )
 
-func (f {{ $sig.TypeName }}) Bind(segIdxes []int) (http.HandlerFunc, error) {
+func (f {{ $sig.TypeName }}) Bind(segIdxes []int) (http.Handler, error) {
 	if len(segIdxes) != {{ len $sig.Params }} {
 		return nil, ErrWrongNumParams
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var segs [{{ len $sig.Params }}]string
 		findNSegments(r.URL.Path, segIdxes[:], segs[:])
 		{{- range $idx, $p := $sig.Params }}
@@ -76,7 +77,7 @@ func (f {{ $sig.TypeName }}) Bind(segIdxes []int) (http.HandlerFunc, error) {
 			{{ end }}
 			{{- end }}
 		)
-	}, nil
+	}), nil
 }
 {{ end }}
 `))
