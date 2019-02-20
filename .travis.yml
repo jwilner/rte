@@ -2,3 +2,12 @@ language: go
 go:
 - '1.11'
 
+install:
+- go get -u golang.org/x/lint/golint
+
+before_script:
+- devscripts/check.sh
+
+script:
+- make test
+

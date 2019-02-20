@@ -11,7 +11,7 @@ import (
 
 func Test_matchPath(t *testing.T) {
 	h200 := func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(rte.PathVars(r))
+		_ = json.NewEncoder(w).Encode(nil)
 	}
 	h404 := func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("404"))
@@ -56,13 +56,17 @@ func Test_matchPath(t *testing.T) {
 		{
 			"wildcard-match",
 			httptest.NewRequest("GET", "/abc", nil),
-			rte.Func("GET", "/*", h200),
+			rte.FuncS1("GET", "/:whoo", func(w http.ResponseWriter, r *http.Request, whoo string) {
+				_ = json.NewEncoder(w).Encode([]string{whoo})
+			}),
 			`["abc"]`,
 		},
 		{
 			"multiple-wildcard",
 			httptest.NewRequest("GET", "/abc/123", nil),
-			rte.Func("GET", "/*/*", h200),
+			rte.FuncS2("GET", "/:foo/:bar", func(w http.ResponseWriter, r *http.Request, foo, bar string) {
+				_ = json.NewEncoder(w).Encode([]string{foo, bar})
+			}),
 			`["abc","123"]`,
 		},
 	}
@@ -79,5 +83,21 @@ func Test_matchPath(t *testing.T) {
 				t.Errorf("resp: got %#v, want %#v", body, tt.body)
 			}
 		})
+	}
+}
+
+func BenchmarkRoute(b *testing.B) {
+	tbl := rte.Must(
+		rte.FuncS1("GET", "/abc/:blah", func(w http.ResponseWriter, r *http.Request, blah string) {
+		}),
+	)
+
+	r := httptest.NewRequest("GET", "/abc/heeeey", nil)
+	w := httptest.NewRecorder()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		tbl.ServeHTTP(w, r)
 	}
 }
