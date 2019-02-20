@@ -1,7 +1,6 @@
-// Package rte provides simple performant routing.
-// - Define individual routes with `rte.Func`,
+// Package rte provides simple, performant routing.
+// - Define individual routes with `rte.Func` and generated siblings
 // - Combine them into a table with `rte.Must` or `rte.New`
-// - Access wildcard matched variables with `rte.PathVars`
 package rte
 
 import (
@@ -16,35 +15,39 @@ const (
 )
 
 var (
-	WrongNumParams = errors.New(errTooManyParams)
+	// ErrWrongNumParams is returned when a Binder attempts to wrap a hand
+	ErrWrongNumParams = errors.New(errTooManyParams)
 )
 
-type Wrapper interface {
-	Wrap(segIdxes []int) (http.HandlerFunc, error)
+// Binder is the common interface which binding handlers have to fulfill
+type Binder interface {
+	// Bind is invoked with segment indexes corresponding to path wildcards and returns a handler or an error.
+	Bind(segIdxes []int) (http.HandlerFunc, error)
 }
 
 // Func routes requests matching the method and path to a handler
 func Func(method, path string, f http.HandlerFunc) Route {
-	return Wrap(method, path, func0(f))
+	return Bind(method, path, func0(f))
 }
 
 type func0 http.HandlerFunc
 
-func (f func0) Wrap(segIdxes []int) (http.HandlerFunc, error) {
+func (f func0) Bind(segIdxes []int) (http.HandlerFunc, error) {
 	if len(segIdxes) != 0 {
-		return nil, WrongNumParams
+		return nil, ErrWrongNumParams
 	}
 	return http.HandlerFunc(f), nil
 }
 
-func Wrap(method, path string, f Wrapper) Route {
+// Bind takes in a method, path, and a Binder and returns a route.
+func Bind(method, path string, f Binder) Route {
 	return Route{Method: method, Path: path, Handler: f}
 }
 
 // Route is data for routing to a handler
 type Route struct {
 	Method, Path string
-	Handler      Wrapper
+	Handler      Binder
 }
 
 // Must builds routes into a Table and panics if there's an error
@@ -106,7 +109,7 @@ func New(routes ...Route) (*Table, error) {
 		}
 
 		var err error
-		if n.h, err = r.Handler.Wrap(paramPos); err != nil {
+		if n.h, err = r.Handler.Bind(paramPos); err != nil {
 			return nil, fmt.Errorf("route %v: invalid parameters: %v", i, err)
 		}
 	}
@@ -189,10 +192,11 @@ func (n *node) match(seg string) (string, *node) {
 	}
 }
 
-// ("/abc/def", 0) -> ""
-// ("/abc/def", 1) -> "abc"
-// ("/abc/def", 2) -> "def"
-// ("/abc/", 1) -> panic
+// ("/abc/def", [0]) -> [""]
+// ("/abc/def", [1]) -> ["abc"]
+// ("/abc/def", [2]) -> ["def"]
+// ("/abc/def", [0, 2]) -> ["", "def"]
+// ("/abc/", [1]) -> panic
 func findNSegments(path string, segIdxes []int, segs []string) {
 	var (
 		curSegIdx    = 0

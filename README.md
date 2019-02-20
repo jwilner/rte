@@ -36,3 +36,16 @@ func main() {
     ))
 }
 ```
+
+## Development
+
+Check out the [Makefile](Makefile) for dev entrypoints.
+
+TLDR:
+- `make test`
+- `make gen` (builds gen binary and regenerates code)
+- `make lint` (runs `golint` -- install with `go get -u golang.org/x/lint/golint`)
+
+## CI
+
+Travis builds. In addition to tests, the build is gated on `golint` and whether the checked-in generated code matches the code as currently generated.
