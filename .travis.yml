@@ -6,7 +6,7 @@ install:
 - go get -u golang.org/x/lint/golint
 
 before_script:
-- .travis/before_script.sh
+- devscripts/check.sh
 
 script:
 - make test

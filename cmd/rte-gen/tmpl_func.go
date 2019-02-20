@@ -1,6 +1,12 @@
 package main
 
-import "text/template"
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"sort"
+	"text/template"
+)
 
 var (
 	tmplFunc = template.Must(template.New("").Parse(`
@@ -75,3 +81,31 @@ func (f {{ $sig.TypeName }}) Bind(segIdxes []int) (http.HandlerFunc, error) {
 {{ end }}
 `))
 )
+
+func writeFunctionFile(w io.Writer, sigs []sig) error {
+	imports := []string{"net/http"}
+	{
+		seen := make(map[string]bool)
+		for _, sig := range sigs {
+			for _, p := range sig.Params {
+				for _, i := range p.Type.Imports {
+					if !seen[i] {
+						seen[i] = true
+						imports = append(imports, i)
+					}
+				}
+			}
+		}
+		sort.Strings(imports)
+	}
+
+	var buf bytes.Buffer
+	if err := tmplFunc.Execute(&buf, struct {
+		Sigs    []sig
+		Imports []string
+	}{sigs, imports}); err != nil {
+		return fmt.Errorf("tmplFunc.Execute: %v", err)
+	}
+
+	return writeFormatted(buf.Bytes(), w)
+}
