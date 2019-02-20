@@ -1,13 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"go/format"
 	"io"
 	"log"
 	"os"
-	"sort"
 	"strings"
 )
 
@@ -135,7 +133,6 @@ func generateDefaultSigs() []sig {
 	}
 	return sigs
 }
-
 
 func writeFormatted(bs []byte, w io.Writer) error {
 	var err error
