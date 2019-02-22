@@ -18,8 +18,7 @@ type (
 		Desc    string
 	}
 
-	sig struct {
-		FuncName string
+	Sig struct {
 		TypeName string
 		Params   []param
 	}
@@ -67,7 +66,11 @@ var (
 	}
 )
 
-func (s sig) ParamGroups() []paramGroup {
+func (s Sig) ParamGroups() []paramGroup {
+	if len(s.Params) == 0 {
+		return nil
+	}
+
 	var grps []paramGroup
 	var cur paramGroup
 	for _, p := range s.Params {
@@ -97,17 +100,17 @@ func main() {
 	}
 }
 
-func generateDefaultSigs() []sig {
+func generateDefaultSigs() []Sig {
 	const maxParams = 2
 
 	// numSignatures = sum(len(baseParamTypes) ** i for i in range(1, maxParams + 1))
-	var sigs []sig
+	sigs := []Sig{{TypeName: "Func"}}
 	for _, pTypes := range product(baseParamTypes, maxParams) {
 		if len(pTypes) == 0 { // we don't autogenerate the zero func
 			continue
 		}
 
-		var s sig
+		var s Sig
 		var nameParts []string
 		{
 			type count struct {
@@ -126,8 +129,7 @@ func generateDefaultSigs() []sig {
 			}
 			nameParts = append(nameParts, fmt.Sprintf("%v%d", c.Initial, c.Number))
 		}
-		s.FuncName = fmt.Sprintf("Func%v", strings.ToUpper(strings.Join(nameParts, "")))
-		s.TypeName = fmt.Sprintf("func%v", strings.ToUpper(strings.Join(nameParts, "")))
+		s.TypeName = fmt.Sprintf("Func%v", strings.ToUpper(strings.Join(nameParts, "")))
 
 		sigs = append(sigs, s)
 	}
