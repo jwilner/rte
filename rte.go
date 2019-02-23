@@ -4,34 +4,27 @@
 package rte
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 )
 
 const (
-	errTooManyParams = "path has too many parameters"
+	maxVars = 8
 )
 
-var (
-	// ErrWrongNumParams is returned when a Binder attempts to wrap a hand
-	ErrWrongNumParams = errors.New(errTooManyParams)
-)
+type pathVars [maxVars]string
 
-// Binder is the common interface which binding handlers have to fulfill
-type Binder interface {
-	// Bind is invoked with segment indexes corresponding to path wildcards and returns a handler or an error.
-	Bind(bCtx BindContext) (http.Handler, error)
-}
+// BoundHandler is a handler function permitting no-allocation handling of path variables
+type BoundHandler func(w http.ResponseWriter, r *http.Request, pathVars pathVars)
 
 // Middleware is shorthand for a function which takes in a handler and returns another
-type Middleware = func(http.Handler) http.Handler
+type Middleware = func(BoundHandler) BoundHandler
 
 // Route is data for routing to a handler
 type Route struct {
 	Method, Path string
-	Handler      Binder
+	Handler      BoundHandler
 	Middleware   Middleware
 }
 
@@ -97,10 +90,7 @@ func New(routes []Route) (*Table, error) {
 			return nil, fmt.Errorf("route %v: already has a handler for %v %#v", i, r.Method, r.Path)
 		}
 
-		var err error
-		if n.h, err = r.Handler.Bind(bCtx); err != nil {
-			return nil, fmt.Errorf("route %v: invalid parameters: %v", i, err)
-		}
+		n.h = r.Handler
 
 		if r.Middleware != nil {
 			n.h = r.Middleware(n.h)
@@ -138,7 +128,7 @@ func normalize(seg string) (norm string, name string, err error) {
 		err = fmt.Errorf("wildcard segment %q must have a name", seg)
 	case seg[len(seg)-1] == '/':
 		// trim off colon and slash for name
-		norm, name = "*/", seg[1 : len(seg)-1]
+		norm, name = "*/", seg[1:len(seg)-1]
 	default:
 		// trim off colon for name
 		norm, name = "*", seg[1:]
@@ -160,7 +150,11 @@ func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	n := t.m[r.Method]
 
-	// Analogus to `SplitAfter`, but avoids an alloc for fun
+	var (
+		i      int
+		params [maxVars]string
+	)
+	// Analogous to `SplitAfter`, but avoids an alloc for fun
 	// "" -> [], "/" -> [""], "/abc" -> ["/", "abc"], "/abc/" -> [",", "abc/", ""]
 	if start := strings.Index(r.URL.Path, "/") + 1; start != 0 {
 		for hitEnd := false; !hitEnd; {
@@ -172,9 +166,13 @@ func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				hitEnd = true
 			}
 
-			if _, n = n.match(r.URL.Path[start:end]); n == nil {
+			var m string
+			if m, n = n.match(r.URL.Path[start:end]); n == nil {
 				t.Default.ServeHTTP(w, r)
 				return
+			} else if m != "" { // m is a path var
+				params[i] = m
+				i++
 			}
 
 			start = end
@@ -186,12 +184,12 @@ func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	n.h.ServeHTTP(w, r)
+	n.h(w, r, params)
 }
 
 type node struct {
 	children map[string]*node
-	h        http.Handler
+	h        BoundHandler
 }
 
 func (n *node) match(seg string) (string, *node) {
@@ -201,34 +199,5 @@ func (n *node) match(seg string) (string, *node) {
 		return seg[:l], n.children["*/"]
 	} else {
 		return seg, n.children["*"]
-	}
-}
-
-// ("/abc/def", [0]) -> [""]
-// ("/abc/def", [1]) -> ["abc"]
-// ("/abc/def", [2]) -> ["def"]
-// ("/abc/def", [0, 2]) -> ["", "def"]
-// ("/abc/", [1]) -> panic
-func findNSegments(path string, segIdxes []int, segs []string) {
-	var (
-		curSegIdx    = 0
-		posLastSlash = 0
-		offsetSlash  = strings.IndexByte(path, '/')
-	)
-
-	for slashNum := 0; curSegIdx < len(segIdxes); slashNum++ {
-		if segIdxes[curSegIdx] == slashNum {
-			if offsetSlash == -1 {
-				segs[curSegIdx] = path[posLastSlash:]
-			} else {
-				segs[curSegIdx] = path[posLastSlash : posLastSlash+offsetSlash] // don't include slash
-			}
-			curSegIdx++
-		} else if offsetSlash == -1 {
-			panic("Ran off the end")
-		}
-
-		posNextSlash := posLastSlash + offsetSlash + 1
-		posLastSlash, offsetSlash = posNextSlash, strings.IndexByte(path[posNextSlash:], '/')
 	}
 }

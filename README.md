@@ -23,7 +23,7 @@ func main() {
     http.Handle("/", rte.Must([]rte.Route{
         {
                 Method: "GET", Path: "/foo/:foo_name/bar/:bar_id",
-                Handler: rte.FuncS1I1(func(w http.ResponseWriter, r *http.Request, fooName string, barID int64) {
+                Handler: rte.Func2(func(w http.ResponseWriter, r *http.Request, fooName, barID string) {
                     _, _ = fmt.Fprintf(w, "fooName: %v, barID: %v\n", fooName, barID)
                 }),
         },

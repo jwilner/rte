@@ -6,86 +6,12 @@ import (
 	"io"
 	"log"
 	"os"
-	"strings"
 )
 
-type (
-	paramType struct {
-		Name    string
-		Initial string
-		Conv    [2]string
-		Imports []string
-		Desc    string
-	}
-
-	Sig struct {
-		TypeName string
-		Params   []param
-	}
-
-	param struct {
-		Name string
-		Type paramType
-	}
-
-	// a group of the same type
-	paramGroup struct {
-		Names []string
-		Type  paramType
-	}
-)
-
-var (
-	baseParamTypes = []paramType{
-		{
-			Initial: "s",
-			Name:    "string",
-			Desc:    "string",
-		},
-		{
-			Initial: "i",
-			Name:    "int64",
-			Conv:    [2]string{"strconv.ParseInt(", ", 10, 64)"},
-			Imports: []string{"strconv"},
-			Desc:    "base-10, max-64 bit integer",
-		},
-		{
-			Initial: "h",
-			Name:    "int64",
-			Conv:    [2]string{"strconv.ParseInt(", ", 16, 64)"},
-			Imports: []string{"strconv"},
-			Desc:    "hex, max-64 bit integer",
-		},
-		{
-			Initial: "u",
-			Name:    "uint64",
-			Conv:    [2]string{"strconv.ParseUint(", ", 10, 64)"},
-			Imports: []string{"strconv"},
-			Desc:    "base-10, max-64 bit unsigned integer",
-		},
-	}
-)
-
-func (s Sig) ParamGroups() []paramGroup {
-	if len(s.Params) == 0 {
-		return nil
-	}
-
-	var grps []paramGroup
-	var cur paramGroup
-	for _, p := range s.Params {
-		if cur.Type.Name == "" {
-			cur.Type = p.Type
-		}
-
-		if cur.Type.Name != p.Type.Name {
-			grps = append(grps, cur)
-			cur = paramGroup{Type: p.Type}
-		}
-
-		cur.Names = append(cur.Names, p.Name)
-	}
-	return append(grps, cur)
+type Signature struct {
+	Name   string
+	ArrLen int
+	Params []string
 }
 
 func main() {
@@ -100,40 +26,21 @@ func main() {
 	}
 }
 
-func generateDefaultSigs() []Sig {
-	const maxParams = 2
-
-	// numSignatures = sum(len(baseParamTypes) ** i for i in range(1, maxParams + 1))
-	sigs := []Sig{{TypeName: "Func"}}
-	for _, pTypes := range product(baseParamTypes, maxParams) {
-		if len(pTypes) == 0 { // we don't autogenerate the zero func
-			continue
-		}
-
-		var s Sig
-		var nameParts []string
-		{
-			type count struct {
-				Initial string
-				Number  int
-			}
-			c := count{Initial: pTypes[0].Initial}
-			for i, p := range pTypes {
-				if c.Initial != p.Initial {
-					nameParts = append(nameParts, fmt.Sprintf("%v%d", c.Initial, c.Number))
-					c = count{Initial: p.Initial}
-				}
-				c.Number++
-
-				s.Params = append(s.Params, param{Name: fmt.Sprintf("%s%d", c.Initial, i), Type: p})
-			}
-			nameParts = append(nameParts, fmt.Sprintf("%v%d", c.Initial, c.Number))
-		}
-		s.TypeName = fmt.Sprintf("Func%v", strings.ToUpper(strings.Join(nameParts, "")))
-
-		sigs = append(sigs, s)
+func generateDefaultSigs() []Signature {
+	signatures := []Signature{
+		{Name: "Func"},
 	}
-	return sigs
+	for i := 1; i < 5; i++ {
+		s := Signature{Name: fmt.Sprintf("Func%d", i)}
+		for j := 0; j < i; j++ {
+			s.Params = append(s.Params, fmt.Sprintf("p%d", j))
+		}
+		signatures = append(signatures, s)
+	}
+	for i := 5; i < 8+1; i++ {
+		signatures = append(signatures, Signature{Name: fmt.Sprintf("Func%d", i), ArrLen: i})
+	}
+	return signatures
 }
 
 func writeFormatted(bs []byte, w io.Writer) error {
@@ -148,25 +55,4 @@ func writeFormatted(bs []byte, w io.Writer) error {
 	}
 
 	return nil
-}
-
-func product(choices []paramType, maxLength int) [][]paramType {
-	var results [][]paramType
-
-	last := [][]paramType{{}}
-	for i := 0; i < maxLength; i++ {
-		copies := make([][]paramType, 0, len(last)*len(choices))
-		for _, arr := range last {
-			for _, choice := range choices {
-				arrCopy := make([]paramType, len(arr)+1)
-				copy(arrCopy, arr)
-				arrCopy[len(arr)] = choice
-				copies = append(copies, arrCopy)
-			}
-		}
-		results = append(results, last...)
-		last = copies
-	}
-
-	return append(results, last...)
 }
