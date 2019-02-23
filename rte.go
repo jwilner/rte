@@ -22,26 +22,7 @@ var (
 // Binder is the common interface which binding handlers have to fulfill
 type Binder interface {
 	// Bind is invoked with segment indexes corresponding to path wildcards and returns a handler or an error.
-	Bind(segIdxes []int) (http.Handler, error)
-}
-
-// Func routes requests matching the method and path to a handler
-func Func(method, path string, f http.HandlerFunc, middlewares ...Middleware) Route {
-	return Bind(method, path, func0(f), middlewares...)
-}
-
-type func0 http.HandlerFunc
-
-func (f func0) Bind(segIdxes []int) (http.Handler, error) {
-	if len(segIdxes) != 0 {
-		return nil, ErrWrongNumParams
-	}
-	return http.HandlerFunc(f), nil
-}
-
-// Bind takes in a method, path, and a Binder and returns a route.
-func Bind(method, path string, f Binder, middlewares ...Middleware) Route {
-	return Route{Method: method, Path: path, Handler: f, Middlewares: middlewares}
+	Bind(bCtx BindContext) (http.Handler, error)
 }
 
 // Middleware is shorthand for a function which takes in a handler and returns another
@@ -51,12 +32,12 @@ type Middleware = func(http.Handler) http.Handler
 type Route struct {
 	Method, Path string
 	Handler      Binder
-	Middlewares  []Middleware
+	Middleware   Middleware
 }
 
 // Must builds routes into a Table and panics if there's an error
-func Must(routes ...Route) *Table {
-	t, e := New(routes...)
+func Must(routes []Route) *Table {
+	t, e := New(routes)
 	if e != nil {
 		panic(e.Error())
 	}
@@ -64,7 +45,7 @@ func Must(routes ...Route) *Table {
 }
 
 // New builds routes into a Table or returns an error
-func New(routes ...Route) (*Table, error) {
+func New(routes []Route) (*Table, error) {
 	t := new(Table)
 
 	t.m = make(map[string]*node)
@@ -92,20 +73,24 @@ func New(routes ...Route) (*Table, error) {
 
 		n := t.m[r.Method]
 
-		var paramPos []int
+		bCtx := BindContext{badArgument: defaultBadArgument}
 		for i, seg := range strings.SplitAfter(r.Path, "/")[1:] {
 			// normalize
-			var err error
-			if seg, err = normalize(seg); err != nil {
+			norm, name, err := normalize(seg)
+			if err != nil {
 				return nil, fmt.Errorf("route %v: invalid segment: %v", i, err)
-			} else if seg == "*" || seg == "*/" {
-				paramPos = append(paramPos, i+1) // account for first segment we skipped
 			}
 
-			if n.children[seg] == nil {
-				n.children[seg] = &node{children: make(map[string]*node)}
+			// we've got a variable
+			if name != "" {
+				bCtx.ParamPos = append(bCtx.ParamPos, i+1) // account for first segment we skipped
+				bCtx.ParamNames = append(bCtx.ParamNames, name)
 			}
-			n = n.children[seg]
+
+			if n.children[norm] == nil {
+				n.children[norm] = &node{children: make(map[string]*node)}
+			}
+			n = n.children[norm]
 		}
 
 		if n.h != nil {
@@ -113,12 +98,12 @@ func New(routes ...Route) (*Table, error) {
 		}
 
 		var err error
-		if n.h, err = r.Handler.Bind(paramPos); err != nil {
+		if n.h, err = r.Handler.Bind(bCtx); err != nil {
 			return nil, fmt.Errorf("route %v: invalid parameters: %v", i, err)
 		}
 
-		for i := len(r.Middlewares) - 1; i >= 0; i-- {
-			n.h = r.Middlewares[i](n.h)
+		if r.Middleware != nil {
+			n.h = r.Middleware(n.h)
 		}
 	}
 
@@ -127,19 +112,38 @@ func New(routes ...Route) (*Table, error) {
 	return t, nil
 }
 
-func normalize(seg string) (string, error) {
+// BindContext provides context about the bound route to the handler.
+type BindContext struct {
+	ParamPos    []int
+	ParamNames  []string
+	badArgument func(w http.ResponseWriter, r *http.Request, pos int, err error)
+}
+
+// BadArgument should be called by bound handlers to report a bad argument and return a 400 to the client.
+func (b *BindContext) BadArgument(w http.ResponseWriter, r *http.Request, pos int, err error) {
+	b.badArgument(w, r, pos, err)
+}
+
+func defaultBadArgument(w http.ResponseWriter, _ *http.Request, _ int, _ error) {
+	w.WriteHeader(http.StatusBadRequest)
+}
+
+func normalize(seg string) (norm string, name string, err error) {
 	switch {
 	case strings.ContainsAny(seg, "*"):
-		return "", fmt.Errorf("segment %q contains invalid characters", seg)
+		err = fmt.Errorf("segment %q contains invalid characters", seg)
 	case seg == "", seg[0] != ':':
-		return seg, nil
+		norm = seg
 	case seg == ":", seg == ":/":
-		return "", fmt.Errorf("wildcard segment %q must have a name", seg)
+		err = fmt.Errorf("wildcard segment %q must have a name", seg)
 	case seg[len(seg)-1] == '/':
-		return "*/", nil
+		// trim off colon and slash for name
+		norm, name = "*/", seg[1 : len(seg)-1]
 	default:
-		return "*", nil
+		// trim off colon for name
+		norm, name = "*", seg[1:]
 	}
+	return
 }
 
 // Table manages the routing table and a default handler

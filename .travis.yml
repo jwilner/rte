@@ -6,8 +6,7 @@ install:
 - go get -u golang.org/x/lint/golint
 
 before_script:
-- devscripts/check.sh
+- make check
 
 script:
 - make test
-
