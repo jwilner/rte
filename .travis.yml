@@ -1,12 +1,12 @@
 language: go
 go:
-- '1.11'
+  - '1.11'
 
 install:
-- go get -u golang.org/x/lint/golint
+  - go get -u golang.org/x/lint/golint
 
 before_script:
-- make check
+  - make check
 
 script:
-- make test
+  - make test

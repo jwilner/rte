@@ -66,23 +66,17 @@ func New(routes []Route) (*Table, error) {
 
 		n := t.m[r.Method]
 
-		bCtx := BindContext{badArgument: defaultBadArgument}
 		for i, seg := range strings.SplitAfter(r.Path, "/")[1:] {
 			// normalize
-			norm, name, err := normalize(seg)
+			norm, err := normalize(seg)
 			if err != nil {
 				return nil, fmt.Errorf("route %v: invalid segment: %v", i, err)
-			}
-
-			// we've got a variable
-			if name != "" {
-				bCtx.ParamPos = append(bCtx.ParamPos, i+1) // account for first segment we skipped
-				bCtx.ParamNames = append(bCtx.ParamNames, name)
 			}
 
 			if n.children[norm] == nil {
 				n.children[norm] = &node{children: make(map[string]*node)}
 			}
+
 			n = n.children[norm]
 		}
 
@@ -102,23 +96,7 @@ func New(routes []Route) (*Table, error) {
 	return t, nil
 }
 
-// BindContext provides context about the bound route to the handler.
-type BindContext struct {
-	ParamPos    []int
-	ParamNames  []string
-	badArgument func(w http.ResponseWriter, r *http.Request, pos int, err error)
-}
-
-// BadArgument should be called by bound handlers to report a bad argument and return a 400 to the client.
-func (b *BindContext) BadArgument(w http.ResponseWriter, r *http.Request, pos int, err error) {
-	b.badArgument(w, r, pos, err)
-}
-
-func defaultBadArgument(w http.ResponseWriter, _ *http.Request, _ int, _ error) {
-	w.WriteHeader(http.StatusBadRequest)
-}
-
-func normalize(seg string) (norm string, name string, err error) {
+func normalize(seg string) (norm string, err error) {
 	switch {
 	case strings.ContainsAny(seg, "*"):
 		err = fmt.Errorf("segment %q contains invalid characters", seg)
@@ -127,11 +105,9 @@ func normalize(seg string) (norm string, name string, err error) {
 	case seg == ":", seg == ":/":
 		err = fmt.Errorf("wildcard segment %q must have a name", seg)
 	case seg[len(seg)-1] == '/':
-		// trim off colon and slash for name
-		norm, name = "*/", seg[1:len(seg)-1]
+		norm = "*/"
 	default:
-		// trim off colon for name
-		norm, name = "*", seg[1:]
+		norm = "*"
 	}
 	return
 }

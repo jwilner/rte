@@ -97,18 +97,3 @@ func Test_matchPath(t *testing.T) {
 		})
 	}
 }
-
-func BenchmarkRoute(b *testing.B) {
-	tbl := rte.Must([]rte.Route{
-		{"GET", "/abc/:blah", rte.Func1(func(w http.ResponseWriter, r *http.Request, blah string) {}), nil},
-	})
-
-	r := httptest.NewRequest("GET", "/abc/heeeey", nil)
-	w := httptest.NewRecorder()
-
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		tbl.ServeHTTP(w, r)
-	}
-}
