@@ -77,6 +77,18 @@ func Test_matchPath(t *testing.T) {
 			},
 			200, `["abc","123"]`,
 		},
+		{
+			"match-method-not-allowed",
+			httptest.NewRequest("GET", "/abc/123", nil),
+			rte.Route{
+				Method: rte.RouteMethodNotAllowed, Path: "/:foo/:bar",
+				Handler: rte.Func2(func(w http.ResponseWriter, r *http.Request, foo, bar string) {
+					w.WriteHeader(http.StatusMethodNotAllowed)
+					_ = json.NewEncoder(w).Encode([]string{foo, bar})
+				}),
+			},
+			405, `["abc","123"]`,
+		},
 	}
 
 	for _, tt := range tests {

@@ -10,6 +10,10 @@ import (
 )
 
 const (
+	RouteMethodNotAllowed = "405"
+)
+
+const (
 	maxVars = 8
 )
 
@@ -40,8 +44,7 @@ func Must(routes []Route) *Table {
 // New builds routes into a Table or returns an error
 func New(routes []Route) (*Table, error) {
 	t := new(Table)
-
-	t.m = make(map[string]*node)
+	t.root = newNode()
 
 	for i, r := range routes {
 		if r.Method == "" {
@@ -60,40 +63,43 @@ func New(routes []Route) (*Table, error) {
 			return nil, fmt.Errorf("route %v: must start with / -- got %q", i, r.Path)
 		}
 
-		if t.m[r.Method] == nil {
-			t.m[r.Method] = &node{children: make(map[string]*node)}
-		}
-
-		n := t.m[r.Method]
-
+		n := t.root
 		for i, seg := range strings.SplitAfter(r.Path, "/")[1:] {
 			// normalize
-			norm, err := normalize(seg)
+			seg, err := normalize(seg)
 			if err != nil {
 				return nil, fmt.Errorf("route %v: invalid segment: %v", i, err)
 			}
 
-			if n.children[norm] == nil {
-				n.children[norm] = &node{children: make(map[string]*node)}
+			if n.children[seg] == nil {
+				n.children[seg] = newNode()
 			}
 
-			n = n.children[norm]
+			n = n.children[seg]
 		}
 
-		if n.h != nil {
+		if _, has := n.methods[r.Method]; has {
 			return nil, fmt.Errorf("route %v: already has a handler for %v %#v", i, r.Method, r.Path)
 		}
 
-		n.h = r.Handler
-
+		h := r.Handler
 		if r.Middleware != nil {
-			n.h = r.Middleware(n.h)
+			h = r.Middleware(h)
 		}
+
+		n.methods[r.Method] = h
 	}
 
 	t.Default = http.NotFoundHandler()
 
 	return t, nil
+}
+
+func newNode() *node {
+	return &node{
+		children: make(map[string]*node),
+		methods:  make(map[string]BoundHandler),
+	}
 }
 
 func normalize(seg string) (norm string, err error) {
@@ -114,40 +120,34 @@ func normalize(seg string) (norm string, err error) {
 
 // Table manages the routing table and a default handler
 type Table struct {
-	m       map[string]*node
 	Default http.Handler
+	root    *node
 }
 
 func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if t.m[r.Method] == nil {
-		t.Default.ServeHTTP(w, r)
-		return
-	}
-
-	n := t.m[r.Method]
-
 	var (
 		i      int
 		params [maxVars]string
+		node   = t.root
 	)
 	// Analogous to `SplitAfter`, but avoids an alloc for fun
-	// "" -> [], "/" -> [""], "/abc" -> ["/", "abc"], "/abc/" -> [",", "abc/", ""]
-	if start := strings.Index(r.URL.Path, "/") + 1; start != 0 {
+	// "" -> [], "/" -> [""], "/abc" -> ["/", "abc"], "/abc/" -> ["/", "abc/", ""]
+	if start := strings.IndexByte(r.URL.Path, '/') + 1; start != 0 {
 		for hitEnd := false; !hitEnd; {
 			var end int
-			if offset := strings.Index(r.URL.Path[start:], "/"); offset != -1 {
+			if offset := strings.IndexByte(r.URL.Path[start:], '/'); offset != -1 {
 				end = start + offset + 1
 			} else {
 				end = len(r.URL.Path)
 				hitEnd = true
 			}
 
-			var m string
-			if m, n = n.match(r.URL.Path[start:end]); n == nil {
+			var pVarName string
+			if pVarName, node = node.match(r.URL.Path[start:end]); node == nil {
 				t.Default.ServeHTTP(w, r)
 				return
-			} else if m != "" { // m is a path var
-				params[i] = m
+			} else if pVarName != "" { // we've matched a path var
+				params[i] = pVarName
 				i++
 			}
 
@@ -155,17 +155,22 @@ func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if n.h == nil {
-		t.Default.ServeHTTP(w, r)
+	if h, ok := node.methods[r.Method]; ok {
+		h(w, r, params)
 		return
 	}
 
-	n.h(w, r, params)
+	if h, ok := node.methods[RouteMethodNotAllowed]; ok {
+		h(w, r, params)
+		return
+	}
+
+	t.Default.ServeHTTP(w, r)
 }
 
 type node struct {
 	children map[string]*node
-	h        BoundHandler
+	methods  map[string]BoundHandler
 }
 
 func (n *node) match(seg string) (string, *node) {
