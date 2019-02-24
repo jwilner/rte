@@ -25,7 +25,7 @@ func TestFuncs(t *testing.T) {
 		Name     string
 		Route 	 string
 		Path 	 string
-		Handler  rte.BoundHandler
+		Handler  rte.Handler
 		Expected string
 	} {
 {{- range $sig := $.Signatures }}
@@ -76,7 +76,7 @@ func BenchmarkFuncs(b *testing.B) {
 		Name     string
 		Route 	 string
 		Path 	 string
-		Handler  rte.BoundHandler
+		Handler  rte.Handler
 	} {
 {{- range $sig := $.Signatures }}
 		{

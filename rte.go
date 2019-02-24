@@ -10,22 +10,99 @@ import (
 )
 
 const (
+	// MethodNotAllowed can be provided used as a method within a route to handle scenarios when the path but not
+	// the method are matched.
+	//
+	// E.g., serve gets on '/foo/:foo_id' and return a 405 for everything else (405 handler can also access path vars):
+	// 		_ = rte.Must([]rte.Route{
+	// 			{Method: "GET", Path: "/foo/:foo_id", Handler: handlerGet},
+	// 			{Method: rte.MethodNotAllowed, Path: "/foo/:foo_id", Handler: handler405},
+	// 		})
+	MethodNotAllowed = "405"
+)
+
+const (
 	maxVars = 8
 )
 
 type pathVars [maxVars]string
 
-// BoundHandler is a handler function permitting no-allocation handling of path variables
-type BoundHandler func(w http.ResponseWriter, r *http.Request, pathVars pathVars)
+// Handler is a handler function permitting no-allocation handling of path variables
+type Handler func(w http.ResponseWriter, r *http.Request, pathVars pathVars)
 
 // Middleware is shorthand for a function which takes in a handler and returns another
-type Middleware = func(BoundHandler) BoundHandler
+type Middleware = func(Handler) Handler
 
 // Route is data for routing to a handler
 type Route struct {
 	Method, Path string
-	Handler      BoundHandler
+	Handler      Handler
 	Middleware   Middleware
+}
+
+func (r Route) String() string {
+	m := "<nil>"
+	if r.Method != "" {
+		m = r.Method
+	}
+
+	p := "<nil>"
+	if r.Path != "" {
+		p = r.Path
+	}
+
+	return fmt.Sprintf("%v %v", m, p)
+}
+
+const (
+	// ErrTypeMethodEmpty means a route was missing a method
+	ErrTypeMethodEmpty = iota
+	// ErrTypeNilHandler means a route had a nil handler
+	ErrTypeNilHandler
+	// ErrTypePathEmpty means a path was empty
+	ErrTypePathEmpty
+	// ErrTypeNoInitialSlash means the path was missing the initial slash
+	ErrTypeNoInitialSlash
+	// ErrTypeInvalidSegment means there was an invalid segment within a path
+	ErrTypeInvalidSegment
+	// ErrTypeDuplicateHandler means more than one handler was provided for the same method and path.
+	ErrTypeDuplicateHandler
+)
+
+// Error encapsulates table construction errors
+type Error struct {
+	Type, Idx int
+	Route     Route
+	cause     error
+}
+
+func (e Error) Error() string {
+	msg := "unknown error"
+	switch e.Type {
+	case ErrTypeMethodEmpty:
+		msg = "method cannot be empty"
+	case ErrTypeNilHandler:
+		msg = "handler cannot be nil"
+	case ErrTypePathEmpty:
+		msg = "path cannot be empty"
+	case ErrTypeNoInitialSlash:
+		msg = "no initial slash"
+	case ErrTypeInvalidSegment:
+		msg = "invalid segment"
+	case ErrTypeDuplicateHandler:
+		msg = "duplicate handler"
+	}
+
+	if e.cause != nil {
+		return fmt.Sprintf("route %d %q: %v: %v", e.Idx, e.Route, msg, e.cause)
+	}
+
+	return fmt.Sprintf("route %d %q: %v", e.Idx, e.Route, msg)
+}
+
+// Cause returns the causing error or nil
+func (e Error) Cause() error {
+	return e.cause
 }
 
 // Must builds routes into a Table and panics if there's an error
@@ -40,60 +117,62 @@ func Must(routes []Route) *Table {
 // New builds routes into a Table or returns an error
 func New(routes []Route) (*Table, error) {
 	t := new(Table)
-
-	t.m = make(map[string]*node)
+	t.root = newNode()
 
 	for i, r := range routes {
 		if r.Method == "" {
-			return nil, fmt.Errorf("route %v: Method cannot be empty", i)
+			return nil, Error{Type: ErrTypeMethodEmpty, Idx: i, Route: r}
 		}
 
 		if r.Handler == nil {
-			return nil, fmt.Errorf("route %v: handle cannot be nil", i)
+			return nil, Error{Type: ErrTypeNilHandler, Idx: i, Route: r}
 		}
 
 		if r.Path == "" {
-			return nil, fmt.Errorf("route %v: Path cannot be empty", i)
+			return nil, Error{Type: ErrTypePathEmpty, Idx: i, Route: r}
 		}
 
 		if r.Path[0] != '/' {
-			return nil, fmt.Errorf("route %v: must start with / -- got %q", i, r.Path)
+			return nil, Error{Type: ErrTypeNoInitialSlash, Idx: i, Route: r}
 		}
 
-		if t.m[r.Method] == nil {
-			t.m[r.Method] = &node{children: make(map[string]*node)}
-		}
-
-		n := t.m[r.Method]
-
-		for i, seg := range strings.SplitAfter(r.Path, "/")[1:] {
+		n := t.root
+		for _, seg := range strings.SplitAfter(r.Path, "/")[1:] {
 			// normalize
-			norm, err := normalize(seg)
+			seg, err := normalize(seg)
 			if err != nil {
-				return nil, fmt.Errorf("route %v: invalid segment: %v", i, err)
+				return nil, Error{Type: ErrTypeInvalidSegment, Idx: i, Route: r, cause: err}
 			}
 
-			if n.children[norm] == nil {
-				n.children[norm] = &node{children: make(map[string]*node)}
+			if n.children[seg] == nil {
+				n.children[seg] = newNode()
 			}
 
-			n = n.children[norm]
+			n = n.children[seg]
 		}
 
-		if n.h != nil {
-			return nil, fmt.Errorf("route %v: already has a handler for %v %#v", i, r.Method, r.Path)
+		if _, has := n.methods[r.Method]; has {
+			return nil, Error{Type: ErrTypeDuplicateHandler, Idx: i, Route: r}
 		}
 
-		n.h = r.Handler
-
+		h := r.Handler
 		if r.Middleware != nil {
-			n.h = r.Middleware(n.h)
+			h = r.Middleware(h)
 		}
+
+		n.methods[r.Method] = h
 	}
 
 	t.Default = http.NotFoundHandler()
 
 	return t, nil
+}
+
+func newNode() *node {
+	return &node{
+		children: make(map[string]*node),
+		methods:  make(map[string]Handler),
+	}
 }
 
 func normalize(seg string) (norm string, err error) {
@@ -114,40 +193,34 @@ func normalize(seg string) (norm string, err error) {
 
 // Table manages the routing table and a default handler
 type Table struct {
-	m       map[string]*node
 	Default http.Handler
+	root    *node
 }
 
 func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if t.m[r.Method] == nil {
-		t.Default.ServeHTTP(w, r)
-		return
-	}
-
-	n := t.m[r.Method]
-
 	var (
 		i      int
 		params [maxVars]string
+		node   = t.root
 	)
 	// Analogous to `SplitAfter`, but avoids an alloc for fun
-	// "" -> [], "/" -> [""], "/abc" -> ["/", "abc"], "/abc/" -> [",", "abc/", ""]
-	if start := strings.Index(r.URL.Path, "/") + 1; start != 0 {
+	// "" -> [], "/" -> [""], "/abc" -> ["/", "abc"], "/abc/" -> ["/", "abc/", ""]
+	if start := strings.IndexByte(r.URL.Path, '/') + 1; start != 0 {
 		for hitEnd := false; !hitEnd; {
 			var end int
-			if offset := strings.Index(r.URL.Path[start:], "/"); offset != -1 {
+			if offset := strings.IndexByte(r.URL.Path[start:], '/'); offset != -1 {
 				end = start + offset + 1
 			} else {
 				end = len(r.URL.Path)
 				hitEnd = true
 			}
 
-			var m string
-			if m, n = n.match(r.URL.Path[start:end]); n == nil {
+			var pVarName string
+			if pVarName, node = node.match(r.URL.Path[start:end]); node == nil {
 				t.Default.ServeHTTP(w, r)
 				return
-			} else if m != "" { // m is a path var
-				params[i] = m
+			} else if pVarName != "" { // we've matched a path var
+				params[i] = pVarName
 				i++
 			}
 
@@ -155,17 +228,22 @@ func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if n.h == nil {
-		t.Default.ServeHTTP(w, r)
+	if h, ok := node.methods[r.Method]; ok {
+		h(w, r, params)
 		return
 	}
 
-	n.h(w, r, params)
+	if h, ok := node.methods[MethodNotAllowed]; ok {
+		h(w, r, params)
+		return
+	}
+
+	t.Default.ServeHTTP(w, r)
 }
 
 type node struct {
 	children map[string]*node
-	h        BoundHandler
+	methods  map[string]Handler
 }
 
 func (n *node) match(seg string) (string, *node) {
