@@ -11,7 +11,12 @@ function main {
         echo -n "$to_format" >&2
         exit 1
     fi
-    go run cmd/rte-gen/*.go | diff rte_func.go -
+
+    go run cmd/rte-gen/*.go -output - | diff rte_func.go -
+    go run cmd/rte-gen/*.go -test-output - | diff rte_func_test.go -
+
+    go vet ./...
+
     golint
 }
 

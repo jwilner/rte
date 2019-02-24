@@ -10,10 +10,10 @@ import (
 )
 
 func Test_matchPath(t *testing.T) {
-	var h200 rte.Func = func(w http.ResponseWriter, r *http.Request) {
+	var h200 = func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(nil)
 	}
-	var h404 rte.Func = func(w http.ResponseWriter, r *http.Request) {
+	var h404 = func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
 		_, _ = w.Write([]byte("404"))
 	}
@@ -60,7 +60,7 @@ func Test_matchPath(t *testing.T) {
 			httptest.NewRequest("GET", "/abc", nil),
 			rte.Route{
 				Method: "GET", Path: "/:whoo",
-				Handler: rte.FuncS1(func(w http.ResponseWriter, r *http.Request, whoo string) {
+				Handler: rte.Func1(func(w http.ResponseWriter, r *http.Request, whoo string) {
 					_ = json.NewEncoder(w).Encode([]string{whoo})
 				}),
 			},
@@ -71,34 +71,11 @@ func Test_matchPath(t *testing.T) {
 			httptest.NewRequest("GET", "/abc/123", nil),
 			rte.Route{
 				Method: "GET", Path: "/:foo/:bar",
-				Handler: rte.FuncS2(func(w http.ResponseWriter, r *http.Request, foo, bar string) {
+				Handler: rte.Func2(func(w http.ResponseWriter, r *http.Request, foo, bar string) {
 					_ = json.NewEncoder(w).Encode([]string{foo, bar})
 				}),
 			},
 			200, `["abc","123"]`,
-		},
-		{
-			"hex",
-			httptest.NewRequest("GET", "/abc/123", nil),
-			rte.Route{
-				Method: "GET",
-				Path:   "/:foo/:bar",
-				Handler: rte.FuncH2(func(w http.ResponseWriter, r *http.Request, foo, bar int64) {
-					_ = json.NewEncoder(w).Encode([]int64{foo, bar})
-				}),
-			},
-			200, `[2748,291]`,
-		},
-		{
-			"bad request",
-			httptest.NewRequest("GET", "/xyz", nil),
-			rte.Route{
-				Method: "GET",
-				Path:   "/:foo",
-				Handler: rte.FuncH1(func(w http.ResponseWriter, r *http.Request, foo int64) {
-				}),
-			},
-			400, "",
 		},
 	}
 
@@ -118,20 +95,5 @@ func Test_matchPath(t *testing.T) {
 				t.Fatalf("resp: got %#v, want %#v", body, tt.body)
 			}
 		})
-	}
-}
-
-func BenchmarkRoute(b *testing.B) {
-	tbl := rte.Must([]rte.Route{
-		{"GET", "/abc/:blah", rte.FuncS1(func(w http.ResponseWriter, r *http.Request, blah string) {}), nil},
-	})
-
-	r := httptest.NewRequest("GET", "/abc/heeeey", nil)
-	w := httptest.NewRecorder()
-
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		tbl.ServeHTTP(w, r)
 	}
 }

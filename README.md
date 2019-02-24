@@ -7,8 +7,7 @@ Dead simple, opinionated, performant routing.
 
 - Only routes on method and path
 - Routes are data to be manipulated and tested.
-- Generate handler adapters means requests routed without any heap allocations
-- Typed path parameters mean you get to business logic faster
+- Generated handler adapters means requests routed without any heap allocations
 
 ```go
 package main
@@ -23,14 +22,14 @@ func main() {
     http.Handle("/", rte.Must([]rte.Route{
         {
                 Method: "GET", Path: "/foo/:foo_name/bar/:bar_id",
-                Handler: rte.FuncS1I1(func(w http.ResponseWriter, r *http.Request, fooName string, barID int64) {
+                Handler: rte.Func2(func(w http.ResponseWriter, r *http.Request, fooName, barID string) {
                     _, _ = fmt.Fprintf(w, "fooName: %v, barID: %v\n", fooName, barID)
                 }),
         },
         {
                 Method: "POST", Path: "/foo",
                 Handler: rte.Func(func(w http.ResponseWriter, _ *http.Request) {
-                _, _ = w.Write([]byte("handled by foo"))
+                    _, _ = w.Write([]byte("handled by foo"))
                 }),
         },
     }))
