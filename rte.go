@@ -55,19 +55,25 @@ func (r Route) String() string {
 }
 
 const (
+	// ErrTypeMethodEmpty means a route was missing a method
 	ErrTypeMethodEmpty = iota
+	// ErrTypeNilHandler means a route had a nil handler
 	ErrTypeNilHandler
+	// ErrTypePathEmpty means a path was empty
 	ErrTypePathEmpty
+	// ErrTypeNoInitialSlash means the path was missing the initial slash
 	ErrTypeNoInitialSlash
+	// ErrTypeInvalidSegment means there was an invalid segment within a path
 	ErrTypeInvalidSegment
+	// ErrTypeDuplicateHandler means more than one handler was provided for the same method and path.
 	ErrTypeDuplicateHandler
 )
 
+// Error encapsulates table construction errors
 type Error struct {
-	Type  int
-	Idx   int
-	Route Route
-	cause error
+	Type, Idx int
+	Route     Route
+	cause     error
 }
 
 func (e Error) Error() string {
@@ -94,6 +100,7 @@ func (e Error) Error() string {
 	return fmt.Sprintf("route %d %q: %v", e.Idx, e.Route, msg)
 }
 
+// Cause returns the causing error or nil
 func (e Error) Cause() error {
 	return e.cause
 }
