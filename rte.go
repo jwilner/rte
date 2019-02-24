@@ -40,6 +40,64 @@ type Route struct {
 	Middleware   Middleware
 }
 
+func (r Route) String() string {
+	m := "<nil>"
+	if r.Method != "" {
+		m = r.Method
+	}
+
+	p := "<nil>"
+	if r.Path != "" {
+		p = r.Path
+	}
+
+	return fmt.Sprintf("%v %v", m, p)
+}
+
+const (
+	ErrTypeMethodEmpty = iota
+	ErrTypeNilHandler
+	ErrTypePathEmpty
+	ErrTypeNoInitialSlash
+	ErrTypeInvalidSegment
+	ErrTypeDuplicateHandler
+)
+
+type Error struct {
+	Type  int
+	Idx   int
+	Route Route
+	cause error
+}
+
+func (e Error) Error() string {
+	msg := "unknown error"
+	switch e.Type {
+	case ErrTypeMethodEmpty:
+		msg = "method cannot be empty"
+	case ErrTypeNilHandler:
+		msg = "handler cannot be nil"
+	case ErrTypePathEmpty:
+		msg = "path cannot be empty"
+	case ErrTypeNoInitialSlash:
+		msg = "no initial slash"
+	case ErrTypeInvalidSegment:
+		msg = "invalid segment"
+	case ErrTypeDuplicateHandler:
+		msg = "duplicate handler"
+	}
+
+	if e.cause != nil {
+		return fmt.Sprintf("route %d %q: %v: %v", e.Idx, e.Route, msg, e.cause)
+	}
+
+	return fmt.Sprintf("route %d %q: %v", e.Idx, e.Route, msg)
+}
+
+func (e Error) Cause() error {
+	return e.cause
+}
+
 // Must builds routes into a Table and panics if there's an error
 func Must(routes []Route) *Table {
 	t, e := New(routes)
@@ -56,27 +114,27 @@ func New(routes []Route) (*Table, error) {
 
 	for i, r := range routes {
 		if r.Method == "" {
-			return nil, fmt.Errorf("route %v: Method cannot be empty", i)
+			return nil, Error{Type: ErrTypeMethodEmpty, Idx: i, Route: r}
 		}
 
 		if r.Handler == nil {
-			return nil, fmt.Errorf("route %v: handle cannot be nil", i)
+			return nil, Error{Type: ErrTypeNilHandler, Idx: i, Route: r}
 		}
 
 		if r.Path == "" {
-			return nil, fmt.Errorf("route %v: Path cannot be empty", i)
+			return nil, Error{Type: ErrTypePathEmpty, Idx: i, Route: r}
 		}
 
 		if r.Path[0] != '/' {
-			return nil, fmt.Errorf("route %v: must start with / -- got %q", i, r.Path)
+			return nil, Error{Type: ErrTypeNoInitialSlash, Idx: i, Route: r}
 		}
 
 		n := t.root
-		for i, seg := range strings.SplitAfter(r.Path, "/")[1:] {
+		for _, seg := range strings.SplitAfter(r.Path, "/")[1:] {
 			// normalize
 			seg, err := normalize(seg)
 			if err != nil {
-				return nil, fmt.Errorf("route %v: invalid segment: %v", i, err)
+				return nil, Error{Type: ErrTypeInvalidSegment, Idx: i, Route: r, cause: err}
 			}
 
 			if n.children[seg] == nil {
@@ -87,7 +145,7 @@ func New(routes []Route) (*Table, error) {
 		}
 
 		if _, has := n.methods[r.Method]; has {
-			return nil, fmt.Errorf("route %v: already has a handler for %v %#v", i, r.Method, r.Path)
+			return nil, Error{Type: ErrTypeDuplicateHandler, Idx: i, Route: r}
 		}
 
 		h := r.Handler

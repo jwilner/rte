@@ -9,6 +9,155 @@ import (
 	"testing"
 )
 
+func TestNew(t *testing.T) {
+	for _, c := range []struct {
+		Name    string
+		Routes  []rte.Route
+		WantErr bool
+		ErrType int
+		ErrIdx  int
+		ErrMsg  string
+	}{
+		{
+			Name: "emptyNoErr",
+		},
+		{
+			Name: "routesNoErr",
+			Routes: []rte.Route{
+				{Method: "GET", Path: "/", Handler: rte.Func(func(w http.ResponseWriter, r *http.Request) {})},
+			},
+		},
+		{
+			Name: "methodEmpty",
+			Routes: []rte.Route{
+				{Method: "", Path: "/", Handler: rte.Func(func(w http.ResponseWriter, r *http.Request) {})},
+			},
+			WantErr: true,
+			ErrType: rte.ErrTypeMethodEmpty,
+			ErrIdx:  0,
+			ErrMsg:  `route 0 "<nil> /": method cannot be empty`,
+		},
+		{
+			Name:    "routesNilHandler",
+			Routes:  []rte.Route{{Method: "GET", Path: "/", Handler: nil}},
+			WantErr: true,
+			ErrType: rte.ErrTypeNilHandler,
+			ErrIdx:  0,
+			ErrMsg:  `route 0 "GET /": handler cannot be nil`,
+		},
+		{
+			Name: "pathEmpty",
+			Routes: []rte.Route{
+				{Method: "GET", Path: "", Handler: rte.Func(func(w http.ResponseWriter, r *http.Request) {})},
+			},
+			WantErr: true,
+			ErrType: rte.ErrTypePathEmpty,
+			ErrIdx:  0,
+			ErrMsg:  `route 0 "GET <nil>": path cannot be empty`,
+		},
+		{
+			Name: "noInitialSlash",
+			Routes: []rte.Route{
+				{Method: "GET", Path: "hi", Handler: rte.Func(func(w http.ResponseWriter, r *http.Request) {})},
+			},
+			WantErr: true,
+			ErrType: rte.ErrTypeNoInitialSlash,
+			ErrIdx:  0,
+			ErrMsg:  `route 0 "GET hi": no initial slash`,
+		},
+		{
+			Name: "invalidSegmentMissingName",
+			Routes: []rte.Route{
+				{Method: "GET", Path: "/:", Handler: rte.Func(func(w http.ResponseWriter, r *http.Request) {})},
+			},
+			WantErr: true,
+			ErrType: rte.ErrTypeInvalidSegment,
+			ErrIdx:  0,
+			ErrMsg:  `route 0 "GET /:": invalid segment: wildcard segment ":" must have a name`,
+		},
+		{
+			Name: "invalidSegmentInvalidChar",
+			Routes: []rte.Route{
+				{Method: "GET", Path: "/*", Handler: rte.Func(func(w http.ResponseWriter, r *http.Request) {})},
+			},
+			WantErr: true,
+			ErrType: rte.ErrTypeInvalidSegment,
+			ErrIdx:  0,
+			ErrMsg:  `route 0 "GET /*": invalid segment: segment "*" contains invalid characters`,
+		},
+		{
+			Name: "duplicate handler",
+			Routes: []rte.Route{
+				{Method: "GET", Path: "/", Handler: rte.Func(func(w http.ResponseWriter, r *http.Request) {})},
+				{Method: "GET", Path: "/", Handler: rte.Func(func(w http.ResponseWriter, r *http.Request) {})},
+			},
+			WantErr: true,
+			ErrType: rte.ErrTypeDuplicateHandler,
+			ErrIdx:  1,
+			ErrMsg:  `route 1 "GET /": duplicate handler`,
+		},
+	} {
+		t.Run(c.Name, func(t *testing.T) {
+			_, err := rte.New(c.Routes)
+			if c.WantErr != (err != nil) {
+				t.Fatalf("want err %v, got %v", c.WantErr, err)
+			}
+			if c.WantErr {
+				e, ok := err.(rte.Error)
+				switch {
+				case !ok:
+					t.Fatalf("expected a rte.Error, got %T: %v", err, err)
+				case e.Type != c.ErrType:
+					t.Fatalf("expected error type %v, but got %v", c.ErrType, e.Type)
+				case e.Idx != c.ErrIdx:
+					t.Fatalf("expected error to occur with route %v, but got route %v", c.ErrIdx, e.Idx)
+				case e.Error() != c.ErrMsg:
+					t.Fatalf("expected error message %v, but got %v", c.ErrMsg, e.Error())
+				}
+			}
+		})
+	}
+}
+
+func TestMust(t *testing.T) {
+	for _, c := range []struct {
+		Name      string
+		Routes    []rte.Route
+		WantPanic bool
+	}{
+		{
+			Name:   "emptyFine",
+			Routes: nil,
+			WantPanic: false,
+		},
+		{
+			Name: "validRoute",
+			Routes: []rte.Route{
+				{
+					Method: "GET", Path: "/",
+					Handler: rte.Func1(func(w http.ResponseWriter, r *http.Request, p0 string) {
+					}),
+				},
+			},
+			WantPanic: false,
+		},
+		{
+			Name:      "invalidRoute",
+			Routes:    []rte.Route{{Method: "GET", Path: "/", Handler: nil}},
+			WantPanic: true,
+		},
+	} {
+		t.Run(c.Name, func(t *testing.T) {
+			defer func() {
+				if p := recover(); (p != nil) != c.WantPanic {
+					t.Fatalf("want panic %v but got %v", c.WantPanic, p)
+				}
+			}()
+			rte.Must(c.Routes)
+		})
+	}
+}
+
 func Test_matchPath(t *testing.T) {
 	var h200 = func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(nil)
