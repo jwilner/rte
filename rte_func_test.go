@@ -15,7 +15,7 @@ func TestFuncs(t *testing.T) {
 		Name     string
 		Route    string
 		Path     string
-		Handler  rte.BoundHandler
+		Handler  rte.Handler
 		Expected string
 	}{
 		{
@@ -138,7 +138,7 @@ func BenchmarkFuncs(b *testing.B) {
 		Name    string
 		Route   string
 		Path    string
-		Handler rte.BoundHandler
+		Handler rte.Handler
 	}{
 		{
 			"Func",

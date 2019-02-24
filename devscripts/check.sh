@@ -17,7 +17,7 @@ function main {
 
     go vet ./...
 
-    golint
+    golint -set_exit_status
 }
 
 main

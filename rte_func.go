@@ -7,43 +7,43 @@ import (
 
 // generated handler wrappers which avoid allocs
 
-// Func takes in a no path variable handler and returns a BoundHandler fit for static paths
-func Func(f func(w http.ResponseWriter, r *http.Request)) BoundHandler {
+// Func takes in a no path variable handler and returns a Handler fit for static paths
+func Func(f func(w http.ResponseWriter, r *http.Request)) Handler {
 	return func(w http.ResponseWriter, r *http.Request, _ pathVars) {
 		f(w, r)
 	}
 }
 
 // Func1 takes in a standard http handler also expecting 1 path variable values and returns a valid bound handler
-func Func1(f func(w http.ResponseWriter, r *http.Request, p0 string)) BoundHandler {
+func Func1(f func(w http.ResponseWriter, r *http.Request, p0 string)) Handler {
 	return func(w http.ResponseWriter, r *http.Request, pVars pathVars) {
 		f(w, r, pVars[0])
 	}
 }
 
 // Func2 takes in a standard http handler also expecting 2 path variable values and returns a valid bound handler
-func Func2(f func(w http.ResponseWriter, r *http.Request, p0, p1 string)) BoundHandler {
+func Func2(f func(w http.ResponseWriter, r *http.Request, p0, p1 string)) Handler {
 	return func(w http.ResponseWriter, r *http.Request, pVars pathVars) {
 		f(w, r, pVars[0], pVars[1])
 	}
 }
 
 // Func3 takes in a standard http handler also expecting 3 path variable values and returns a valid bound handler
-func Func3(f func(w http.ResponseWriter, r *http.Request, p0, p1, p2 string)) BoundHandler {
+func Func3(f func(w http.ResponseWriter, r *http.Request, p0, p1, p2 string)) Handler {
 	return func(w http.ResponseWriter, r *http.Request, pVars pathVars) {
 		f(w, r, pVars[0], pVars[1], pVars[2])
 	}
 }
 
 // Func4 takes in a standard http handler also expecting 4 path variable values and returns a valid bound handler
-func Func4(f func(w http.ResponseWriter, r *http.Request, p0, p1, p2, p3 string)) BoundHandler {
+func Func4(f func(w http.ResponseWriter, r *http.Request, p0, p1, p2, p3 string)) Handler {
 	return func(w http.ResponseWriter, r *http.Request, pVars pathVars) {
 		f(w, r, pVars[0], pVars[1], pVars[2], pVars[3])
 	}
 }
 
-// Func5 takes in handler expecting array of 5 path variable values and returns a valid bound handler
-func Func5(f func(w http.ResponseWriter, r *http.Request, pVars [5]string)) BoundHandler {
+// Func5 takes in handler expecting array of 5 path variable values and returns a valid handler
+func Func5(f func(w http.ResponseWriter, r *http.Request, pVars [5]string)) Handler {
 	return func(w http.ResponseWriter, r *http.Request, pVars pathVars) {
 		var trimmed [5]string
 		copy(trimmed[:], pVars[:])
@@ -51,8 +51,8 @@ func Func5(f func(w http.ResponseWriter, r *http.Request, pVars [5]string)) Boun
 	}
 }
 
-// Func6 takes in handler expecting array of 6 path variable values and returns a valid bound handler
-func Func6(f func(w http.ResponseWriter, r *http.Request, pVars [6]string)) BoundHandler {
+// Func6 takes in handler expecting array of 6 path variable values and returns a valid handler
+func Func6(f func(w http.ResponseWriter, r *http.Request, pVars [6]string)) Handler {
 	return func(w http.ResponseWriter, r *http.Request, pVars pathVars) {
 		var trimmed [6]string
 		copy(trimmed[:], pVars[:])
@@ -60,8 +60,8 @@ func Func6(f func(w http.ResponseWriter, r *http.Request, pVars [6]string)) Boun
 	}
 }
 
-// Func7 takes in handler expecting array of 7 path variable values and returns a valid bound handler
-func Func7(f func(w http.ResponseWriter, r *http.Request, pVars [7]string)) BoundHandler {
+// Func7 takes in handler expecting array of 7 path variable values and returns a valid handler
+func Func7(f func(w http.ResponseWriter, r *http.Request, pVars [7]string)) Handler {
 	return func(w http.ResponseWriter, r *http.Request, pVars pathVars) {
 		var trimmed [7]string
 		copy(trimmed[:], pVars[:])
@@ -69,8 +69,8 @@ func Func7(f func(w http.ResponseWriter, r *http.Request, pVars [7]string)) Boun
 	}
 }
 
-// Func8 takes in handler expecting array of 8 path variable values and returns a valid bound handler
-func Func8(f func(w http.ResponseWriter, r *http.Request, pVars [maxVars]string)) BoundHandler {
+// Func8 takes in handler expecting array of 8 path variable values and returns a valid handler
+func Func8(f func(w http.ResponseWriter, r *http.Request, pVars [maxVars]string)) Handler {
 	return func(w http.ResponseWriter, r *http.Request, pVars pathVars) {
 		f(w, r, [maxVars]string(pVars))
 	}

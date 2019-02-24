@@ -10,7 +10,15 @@ import (
 )
 
 const (
-	RouteMethodNotAllowed = "405"
+	// MethodNotAllowed can be provided used as a method within a route to handle scenarios when the path but not
+	// the method are matched.
+	//
+	// E.g., serve gets on '/foo/:foo_id' and return a 405 for everything else (405 handler can also access path vars):
+	// 		_ = rte.Must([]rte.Route{
+	// 			{Method: "GET", Path: "/foo/:foo_id", Handler: handlerGet},
+	// 			{Method: rte.MethodNotAllowed, Path: "/foo/:foo_id", Handler: handler405},
+	// 		})
+	MethodNotAllowed = "405"
 )
 
 const (
@@ -19,16 +27,16 @@ const (
 
 type pathVars [maxVars]string
 
-// BoundHandler is a handler function permitting no-allocation handling of path variables
-type BoundHandler func(w http.ResponseWriter, r *http.Request, pathVars pathVars)
+// Handler is a handler function permitting no-allocation handling of path variables
+type Handler func(w http.ResponseWriter, r *http.Request, pathVars pathVars)
 
 // Middleware is shorthand for a function which takes in a handler and returns another
-type Middleware = func(BoundHandler) BoundHandler
+type Middleware = func(Handler) Handler
 
 // Route is data for routing to a handler
 type Route struct {
 	Method, Path string
-	Handler      BoundHandler
+	Handler      Handler
 	Middleware   Middleware
 }
 
@@ -98,7 +106,7 @@ func New(routes []Route) (*Table, error) {
 func newNode() *node {
 	return &node{
 		children: make(map[string]*node),
-		methods:  make(map[string]BoundHandler),
+		methods:  make(map[string]Handler),
 	}
 }
 
@@ -160,7 +168,7 @@ func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h, ok := node.methods[RouteMethodNotAllowed]; ok {
+	if h, ok := node.methods[MethodNotAllowed]; ok {
 		h(w, r, params)
 		return
 	}
@@ -170,7 +178,7 @@ func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type node struct {
 	children map[string]*node
-	methods  map[string]BoundHandler
+	methods  map[string]Handler
 }
 
 func (n *node) match(seg string) (string, *node) {

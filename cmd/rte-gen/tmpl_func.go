@@ -21,28 +21,28 @@ import (
 {{ range $sig := .Signatures }}
 {{ if and (not .Arr) (gt .Count 0) }}
 // {{ .Name }} takes in a standard http handler also expecting {{ .Count }} path variable values and returns a valid bound handler
-func {{ .Name }}(f func(w http.ResponseWriter, r *http.Request, {{ range $idx, $p := .PNames }}{{ if $idx }}, {{ end }}{{ $p }}{{ end }} string)) BoundHandler {
+func {{ .Name }}(f func(w http.ResponseWriter, r *http.Request, {{ range $idx, $p := .PNames }}{{ if $idx }}, {{ end }}{{ $p }}{{ end }} string)) Handler {
 	return func(w http.ResponseWriter, r *http.Request, pVars pathVars) {
 		f(w, r, {{ range $idx, $el := .PNames }}{{ if $idx }}, {{ end }}pVars[{{ $idx }}]{{ end }})
     }
 }
 {{ else if eq .Count 0 }}
-// {{ .Name }} takes in a no path variable handler and returns a BoundHandler fit for static paths
-func {{ .Name }}(f func(w http.ResponseWriter, r *http.Request)) BoundHandler {
+// {{ .Name }} takes in a no path variable handler and returns a Handler fit for static paths
+func {{ .Name }}(f func(w http.ResponseWriter, r *http.Request)) Handler {
 	return func(w http.ResponseWriter, r *http.Request, _ pathVars) {
 		f(w, r)
 	}
 }
 {{ else if eq .Count $.MaxVars }}
-// {{ .Name }} takes in handler expecting array of {{ $.MaxVars }} path variable values and returns a valid bound handler
-func {{ .Name }}(f func(w http.ResponseWriter, r *http.Request, pVars [maxVars]string)) BoundHandler {
+// {{ .Name }} takes in handler expecting array of {{ $.MaxVars }} path variable values and returns a valid handler
+func {{ .Name }}(f func(w http.ResponseWriter, r *http.Request, pVars [maxVars]string)) Handler {
 	return func(w http.ResponseWriter, r *http.Request, pVars pathVars) {
 		f(w, r, [maxVars]string(pVars))
 	}
 }
 {{ else }}
-// {{ .Name }} takes in handler expecting array of {{ .Count }} path variable values and returns a valid bound handler
-func {{ .Name }}(f func(w http.ResponseWriter, r *http.Request, pVars [{{ .Count }}]string)) BoundHandler {
+// {{ .Name }} takes in handler expecting array of {{ .Count }} path variable values and returns a valid handler
+func {{ .Name }}(f func(w http.ResponseWriter, r *http.Request, pVars [{{ .Count }}]string)) Handler {
 	return func(w http.ResponseWriter, r *http.Request, pVars pathVars) {
 		var trimmed [{{ .Count }}]string
 		copy(trimmed[:], pVars[:])
