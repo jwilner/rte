@@ -12,7 +12,10 @@ import (
 var (
 	output     = flag.String("output", "", "where to write the generated code")
 	testOutput = flag.String("test-output", "", "where to write the generated tests")
+	maxVars    = flag.Uint("max-vars", 0, "maximum number of path vars to support")
 )
+
+const zeroFuncName = "func0"
 
 type Signature struct {
 	Name  string
@@ -31,11 +34,15 @@ func (s Signature) PNames() []string {
 func main() {
 	flag.Parse()
 
+	if *maxVars == 0 {
+		log.Fatalln("Please indicate a maximum number of variables to support")
+	}
+
 	if *output == "" && *testOutput == "" {
 		log.Fatalln("Output and/or test output must be provided")
 	}
 
-	sigs := generateDefaultSigs()
+	sigs := generateDefaultSigs(int(*maxVars))
 
 	if *output != "" {
 		o := os.Stdout
@@ -72,15 +79,13 @@ func main() {
 	}
 }
 
-func generateDefaultSigs() []Signature {
-	signatures := []Signature{
-		{Name: "Func"},
-	}
-	for i := 1; i < 5; i++ {
-		signatures = append(signatures, Signature{Name: fmt.Sprintf("Func%d", i), Count: i})
-	}
-	for i := 5; i < 8+1; i++ {
-		signatures = append(signatures, Signature{Name: fmt.Sprintf("Func%d", i), Count: i, Arr: true})
+func generateDefaultSigs(maxVars int) []Signature {
+	signatures := []Signature{{Name: zeroFuncName}}
+	for i := 1; i < maxVars+1; i++ {
+		if i < 5 {
+			signatures = append(signatures, Signature{Name: fmt.Sprintf("func%d", i), Count: i})
+		}
+		signatures = append(signatures, Signature{Name: fmt.Sprintf("arrFunc%d", i), Count: i, Arr: true})
 	}
 	return signatures
 }

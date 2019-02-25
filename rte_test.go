@@ -22,15 +22,13 @@ func TestNew(t *testing.T) {
 			Name: "emptyNoErr",
 		},
 		{
-			Name: "routesNoErr",
-			Routes: []rte.Route{
-				{Method: "GET", Path: "/", Handler: rte.Func(func(w http.ResponseWriter, r *http.Request) {})},
-			},
+			Name:   "routesNoErr",
+			Routes: rte.Routes("GET /", func(w http.ResponseWriter, r *http.Request) {}),
 		},
 		{
 			Name: "methodEmpty",
 			Routes: []rte.Route{
-				{Method: "", Path: "/", Handler: rte.Func(func(w http.ResponseWriter, r *http.Request) {})},
+				{Method: "", Path: "/", Handler: func(w http.ResponseWriter, r *http.Request) {}},
 			},
 			WantErr: true,
 			ErrType: rte.ErrTypeMethodEmpty,
@@ -46,40 +44,32 @@ func TestNew(t *testing.T) {
 			ErrMsg:  `route 0 "GET /": handler cannot be nil`,
 		},
 		{
-			Name: "pathEmpty",
-			Routes: []rte.Route{
-				{Method: "GET", Path: "", Handler: rte.Func(func(w http.ResponseWriter, r *http.Request) {})},
-			},
+			Name:    "pathEmpty",
+			Routes:  []rte.Route{{Method: "GET", Path: "", Handler: func(w http.ResponseWriter, r *http.Request) {}}},
 			WantErr: true,
 			ErrType: rte.ErrTypePathEmpty,
 			ErrIdx:  0,
 			ErrMsg:  `route 0 "GET <nil>": path cannot be empty`,
 		},
 		{
-			Name: "noInitialSlash",
-			Routes: []rte.Route{
-				{Method: "GET", Path: "hi", Handler: rte.Func(func(w http.ResponseWriter, r *http.Request) {})},
-			},
+			Name:    "noInitialSlash",
+			Routes:  rte.Routes("GET hi", func(w http.ResponseWriter, r *http.Request) {}),
 			WantErr: true,
 			ErrType: rte.ErrTypeNoInitialSlash,
 			ErrIdx:  0,
 			ErrMsg:  `route 0 "GET hi": no initial slash`,
 		},
 		{
-			Name: "invalidSegmentMissingName",
-			Routes: []rte.Route{
-				{Method: "GET", Path: "/:", Handler: rte.Func(func(w http.ResponseWriter, r *http.Request) {})},
-			},
+			Name:    "invalidSegmentMissingName",
+			Routes:  rte.Routes("GET /:", func(w http.ResponseWriter, r *http.Request) {}),
 			WantErr: true,
 			ErrType: rte.ErrTypeInvalidSegment,
 			ErrIdx:  0,
 			ErrMsg:  `route 0 "GET /:": invalid segment: wildcard segment ":" must have a name`,
 		},
 		{
-			Name: "invalidSegmentInvalidChar",
-			Routes: []rte.Route{
-				{Method: "GET", Path: "/*", Handler: rte.Func(func(w http.ResponseWriter, r *http.Request) {})},
-			},
+			Name:    "invalidSegmentInvalidChar",
+			Routes:  rte.Routes("GET /*", func(w http.ResponseWriter, r *http.Request) {}),
 			WantErr: true,
 			ErrType: rte.ErrTypeInvalidSegment,
 			ErrIdx:  0,
@@ -87,14 +77,35 @@ func TestNew(t *testing.T) {
 		},
 		{
 			Name: "duplicate handler",
-			Routes: []rte.Route{
-				{Method: "GET", Path: "/", Handler: rte.Func(func(w http.ResponseWriter, r *http.Request) {})},
-				{Method: "GET", Path: "/", Handler: rte.Func(func(w http.ResponseWriter, r *http.Request) {})},
-			},
+			Routes: rte.Routes(
+				"GET /", func(w http.ResponseWriter, r *http.Request) {},
+				"GET /", func(w http.ResponseWriter, r *http.Request) {},
+			),
 			WantErr: true,
 			ErrType: rte.ErrTypeDuplicateHandler,
 			ErrIdx:  1,
 			ErrMsg:  `route 1 "GET /": duplicate handler`,
+		},
+		{
+			Name: "unsupported signature",
+			Routes: []rte.Route{
+				{Method: "GET", Path: "/:whoo", Handler: func(w http.ResponseWriter, r *http.Request, i int) {}},
+			},
+			WantErr: true,
+			ErrType: rte.ErrTypeConversionFailure,
+			ErrIdx:  0,
+			ErrMsg: `route 0 "GET /:whoo": handler has an unsupported signature: unknown handler type: ` +
+				`func(http.ResponseWriter, *http.Request, int)`,
+		},
+		{
+			Name: "mismatched param counts",
+			Routes: rte.Routes(
+				"GET /:whoo", func(w http.ResponseWriter, r *http.Request) {},
+			),
+			WantErr: true,
+			ErrType: rte.ErrTypeParamCountMismatch,
+			ErrIdx:  0,
+			ErrMsg:  `route 0 "GET /:whoo": path and handler have different numbers of parameters`,
 		},
 	} {
 		t.Run(c.Name, func(t *testing.T) {
@@ -126,19 +137,13 @@ func TestMust(t *testing.T) {
 		WantPanic bool
 	}{
 		{
-			Name:   "emptyFine",
-			Routes: nil,
+			Name:      "emptyFine",
+			Routes:    nil,
 			WantPanic: false,
 		},
 		{
-			Name: "validRoute",
-			Routes: []rte.Route{
-				{
-					Method: "GET", Path: "/",
-					Handler: rte.Func1(func(w http.ResponseWriter, r *http.Request, p0 string) {
-					}),
-				},
-			},
+			Name:      "validRoute",
+			Routes:    rte.Routes("GET /", func(w http.ResponseWriter, r *http.Request) {}),
 			WantPanic: false,
 		},
 		{
@@ -159,10 +164,10 @@ func TestMust(t *testing.T) {
 }
 
 func Test_matchPath(t *testing.T) {
-	var h200 = func(w http.ResponseWriter, r *http.Request) {
+	h200 := func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(nil)
 	}
-	var h404 = func(w http.ResponseWriter, r *http.Request) {
+	h404 := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
 		_, _ = w.Write([]byte("404"))
 	}
@@ -177,31 +182,31 @@ func Test_matchPath(t *testing.T) {
 		{
 			"match",
 			httptest.NewRequest("GET", "/abc", nil),
-			rte.Route{Method: "GET", Path: "/abc", Handler: rte.Func(h200)},
+			rte.Route{Method: "GET", Path: "/abc", Handler: h200},
 			200, "null",
 		},
 		{
 			"wrong-method",
 			httptest.NewRequest("PUT", "/abcd", nil),
-			rte.Route{Method: "POST", Path: "/abcd", Handler: rte.Func(h200)},
+			rte.Route{Method: "POST", Path: "/abcd", Handler: h200},
 			404, "404",
 		},
 		{
 			"match-trailing",
 			httptest.NewRequest("HEAD", "/abc/", nil),
-			rte.Route{Method: "HEAD", Path: "/abc/", Handler: rte.Func(h200)},
+			rte.Route{Method: "HEAD", Path: "/abc/", Handler: h200},
 			200, "null",
 		},
 		{
 			"require-trailing",
 			httptest.NewRequest("GET", "/abc/", nil),
-			rte.Route{Method: "GET", Path: "/abc", Handler: rte.Func(h200)},
+			rte.Route{Method: "GET", Path: "/abc", Handler: h200},
 			404, "404",
 		},
 		{
 			"slash-match",
 			httptest.NewRequest("GET", "/", nil),
-			rte.Route{Method: "GET", Path: "/", Handler: rte.Func(h200)},
+			rte.Route{Method: "GET", Path: "/", Handler: h200},
 			200, "null",
 		},
 		{
@@ -209,9 +214,9 @@ func Test_matchPath(t *testing.T) {
 			httptest.NewRequest("GET", "/abc", nil),
 			rte.Route{
 				Method: "GET", Path: "/:whoo",
-				Handler: rte.Func1(func(w http.ResponseWriter, r *http.Request, whoo string) {
+				Handler: func(w http.ResponseWriter, r *http.Request, whoo string) {
 					_ = json.NewEncoder(w).Encode([]string{whoo})
-				}),
+				},
 			},
 			200, `["abc"]`,
 		},
@@ -220,9 +225,9 @@ func Test_matchPath(t *testing.T) {
 			httptest.NewRequest("GET", "/abc/123", nil),
 			rte.Route{
 				Method: "GET", Path: "/:foo/:bar",
-				Handler: rte.Func2(func(w http.ResponseWriter, r *http.Request, foo, bar string) {
+				Handler: func(w http.ResponseWriter, r *http.Request, foo, bar string) {
 					_ = json.NewEncoder(w).Encode([]string{foo, bar})
-				}),
+				},
 			},
 			200, `["abc","123"]`,
 		},
@@ -231,10 +236,10 @@ func Test_matchPath(t *testing.T) {
 			httptest.NewRequest("GET", "/abc/123", nil),
 			rte.Route{
 				Method: rte.MethodNotAllowed, Path: "/:foo/:bar",
-				Handler: rte.Func2(func(w http.ResponseWriter, r *http.Request, foo, bar string) {
+				Handler: func(w http.ResponseWriter, r *http.Request, foo, bar string) {
 					w.WriteHeader(http.StatusMethodNotAllowed)
 					_ = json.NewEncoder(w).Encode([]string{foo, bar})
-				}),
+				},
 			},
 			405, `["abc","123"]`,
 		},
