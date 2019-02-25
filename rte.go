@@ -5,7 +5,9 @@ package rte
 
 import (
 	"fmt"
+	"github.com/jwilner/rte/internal/funcs"
 	"net/http"
+	"regexp"
 	"strings"
 )
 
@@ -14,21 +16,21 @@ const (
 	// the method are matched.
 	//
 	// E.g., serve gets on '/foo/:foo_id' and return a 405 for everything else (405 handler can also access path vars):
-	// 		_ = rte.Must([]rte.Route{
-	// 			{Method: "GET", Path: "/foo/:foo_id", Handler: handlerGet},
-	// 			{Method: rte.MethodNotAllowed, Path: "/foo/:foo_id", Handler: handler405},
-	// 		})
+	// 		_ = rte.Must(rte.Routes(
+	// 			"GET /foo/:foo_id", handlerGet,
+	// 			rte.MethodNotAllowed + " /foo/:foo_id", handler405,
+	// 		))
 	MethodNotAllowed = "405"
 )
 
 const (
-	maxVars = 8
+	wildcard, wildcardSlash = "*", "*/"
 )
 
-type pathVars [maxVars]string
+var reqLine = regexp.MustCompile(`^(\S+)\s+(.+)$`)
 
-// Handler is a handler function permitting no-allocation handling of path variables
-type Handler func(w http.ResponseWriter, r *http.Request, pathVars pathVars)
+// Handler is the type used to wrap the client-provided interface{}
+type Handler = funcs.Handler
 
 // Middleware is shorthand for a function which takes in a handler and returns another
 type Middleware = func(Handler) Handler
@@ -36,7 +38,7 @@ type Middleware = func(Handler) Handler
 // Route is data for routing to a handler
 type Route struct {
 	Method, Path string
-	Handler      Handler
+	Handler      interface{}
 	Middleware   Middleware
 }
 
@@ -67,6 +69,10 @@ const (
 	ErrTypeInvalidSegment
 	// ErrTypeDuplicateHandler means more than one handler was provided for the same method and path.
 	ErrTypeDuplicateHandler
+	// ErrTypeConversionFailure means that the provided value can't be converted to a handler
+	ErrTypeConversionFailure
+	// ErrTypeParamCountMismatch means the handler doesn't match the number of variables in the path
+	ErrTypeParamCountMismatch
 )
 
 // Error encapsulates table construction errors
@@ -91,6 +97,10 @@ func (e Error) Error() string {
 		msg = "invalid segment"
 	case ErrTypeDuplicateHandler:
 		msg = "duplicate handler"
+	case ErrTypeConversionFailure:
+		msg = "handler has an unsupported signature"
+	case ErrTypeParamCountMismatch:
+		msg = "path and handler have different numbers of parameters"
 	}
 
 	if e.cause != nil {
@@ -103,6 +113,58 @@ func (e Error) Error() string {
 // Cause returns the causing error or nil
 func (e Error) Cause() error {
 	return e.cause
+}
+
+// Routes is a vanity constructor for constructing literal routing tables.
+func Routes(is ...interface{}) []Route {
+	var routes []Route
+
+	idxReqLine := 0
+	for idxReqLine < len(is) {
+		if rs, ok := is[idxReqLine].([]Route); ok {
+			routes = append(routes, rs...)
+			idxReqLine++
+			continue
+		}
+
+		r := Route{}
+		{
+			str, ok := is[idxReqLine].(string)
+			if !ok {
+				panic(fmt.Sprintf("value %d must be either a string or a []Route", idxReqLine))
+			}
+
+			match := reqLine.FindStringSubmatch(str)
+			if len(match) == 0 {
+				panic(fmt.Sprintf("value %d must match %q but got %q", idxReqLine, reqLine, match))
+			}
+			r.Method, r.Path = match[1], match[2]
+		}
+
+		idxHandler, idxMW := idxReqLine+1, idxReqLine+2
+		if idxHandler >= len(is) {
+			panic(fmt.Sprintf("Missing a handler for %d", idxHandler))
+		}
+
+		if _, _, err := funcs.Convert(is[idxHandler]); err != nil {
+			panic(err)
+		}
+		r.Handler = is[idxHandler]
+
+		if idxMW < len(is) {
+			if mw, ok := is[idxMW].(Middleware); ok {
+				r.Middleware = mw
+				routes = append(routes, r)
+				idxReqLine = idxMW + 1
+				continue
+			}
+		}
+
+		idxReqLine = idxHandler + 1
+		routes = append(routes, r)
+	}
+
+	return routes
 }
 
 // Must builds routes into a Table and panics if there's an error
@@ -137,11 +199,14 @@ func New(routes []Route) (*Table, error) {
 		}
 
 		n := t.root
+		numPathParams := 0
 		for _, seg := range strings.SplitAfter(r.Path, "/")[1:] {
 			// normalize
 			seg, err := normalize(seg)
 			if err != nil {
 				return nil, Error{Type: ErrTypeInvalidSegment, Idx: i, Route: r, cause: err}
+			} else if seg == wildcard || seg == wildcardSlash {
+				numPathParams++
 			}
 
 			if n.children[seg] == nil {
@@ -155,7 +220,13 @@ func New(routes []Route) (*Table, error) {
 			return nil, Error{Type: ErrTypeDuplicateHandler, Idx: i, Route: r}
 		}
 
-		h := r.Handler
+		h, numHandlerParams, err := funcs.Convert(r.Handler)
+		if err != nil {
+			return nil, Error{Type: ErrTypeConversionFailure, Idx: i, Route: r, cause: err}
+		} else if numPathParams != numHandlerParams {
+			return nil, Error{Type: ErrTypeParamCountMismatch, Idx: i, Route: r}
+		}
+
 		if r.Middleware != nil {
 			h = r.Middleware(h)
 		}
@@ -169,26 +240,22 @@ func New(routes []Route) (*Table, error) {
 }
 
 func newNode() *node {
-	return &node{
-		children: make(map[string]*node),
-		methods:  make(map[string]Handler),
-	}
+	return &node{children: make(map[string]*node), methods: make(map[string]funcs.Handler)}
 }
 
-func normalize(seg string) (norm string, err error) {
+func normalize(seg string) (string, error) {
 	switch {
 	case strings.ContainsAny(seg, "*"):
-		err = fmt.Errorf("segment %q contains invalid characters", seg)
+		return "", fmt.Errorf("segment %q contains invalid characters", seg)
 	case seg == "", seg[0] != ':':
-		norm = seg
+		return seg, nil
 	case seg == ":", seg == ":/":
-		err = fmt.Errorf("wildcard segment %q must have a name", seg)
+		return "", fmt.Errorf("wildcard segment %q must have a name", seg)
 	case seg[len(seg)-1] == '/':
-		norm = "*/"
+		return wildcardSlash, nil
 	default:
-		norm = "*"
+		return wildcard, nil
 	}
-	return
 }
 
 // Table manages the routing table and a default handler
@@ -200,7 +267,7 @@ type Table struct {
 func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
 		i      int
-		params [maxVars]string
+		params funcs.PathVars
 		node   = t.root
 	)
 	// Analogous to `SplitAfter`, but avoids an alloc for fun
@@ -243,15 +310,15 @@ func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type node struct {
 	children map[string]*node
-	methods  map[string]Handler
+	methods  map[string]funcs.Handler
 }
 
 func (n *node) match(seg string) (string, *node) {
 	if c := n.children[seg]; c != nil {
 		return "", c
 	} else if l := len(seg) - 1; l >= 0 && seg[l] == '/' {
-		return seg[:l], n.children["*/"]
+		return seg[:l], n.children[wildcardSlash]
 	} else {
-		return seg, n.children["*"]
+		return seg, n.children[wildcard]
 	}
 }

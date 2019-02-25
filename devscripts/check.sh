@@ -5,6 +5,7 @@ set -e
 # checks stuff and fails if no bueno
 
 function main {
+    local max_vars="${1}"
     local to_format=$(gofmt -l . | sort)
     if [ $(echo -n "$to_format" | wc -l) -gt 0 ]; then
         echo "files are misformatted: " >&2
@@ -12,13 +13,12 @@ function main {
         exit 1
     fi
 
-    go run cmd/rte-gen/*.go -output - | diff rte_func.go -
-    go run cmd/rte-gen/*.go -test-output - | diff rte_func_test.go -
+    go run cmd/rte-gen/*.go -max-vars "${max_vars}" -output - | diff internal/funcs/funcs.go -
+    go run cmd/rte-gen/*.go -max-vars "${max_vars}" -test-output - | diff internal/funcs/funcs_test.go -
 
     go vet ./...
 
     golint -set_exit_status
 }
 
-main
-
+main "${1}"

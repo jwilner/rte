@@ -19,20 +19,16 @@ import (
 )
 
 func main() {
-    http.Handle("/", rte.Must([]rte.Route{
-        {
-                Method: "GET", Path: "/foo/:foo_name/bar/:bar_id",
-                Handler: rte.Func2(func(w http.ResponseWriter, r *http.Request, fooName, barID string) {
-                    _, _ = fmt.Fprintf(w, "fooName: %v, barID: %v\n", fooName, barID)
-                }),
+    http.Handle("/", rte.Must(rte.Routes(
+        "GET /foo/:foo_name/bar/:bar_id", 
+        func(w http.ResponseWriter, r *http.Request, fooName, barID string) {
+            _, _ = fmt.Fprintf(w, "fooName: %v, barID: %v\n", fooName, barID)
         },
-        {
-                Method: "POST", Path: "/foo",
-                Handler: rte.Func(func(w http.ResponseWriter, _ *http.Request) {
-                    _, _ = w.Write([]byte("handled by foo"))
-                }),
+        "POST /foo", 
+        func(w http.ResponseWriter, _ *http.Request) {
+            _, _ = w.Write([]byte("handled by foo"))
         },
-    }))
+    )))
 }
 ```
 
