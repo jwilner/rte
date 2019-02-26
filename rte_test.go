@@ -1,22 +1,25 @@
-package rte_test
+/**/ package rte_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/jwilner/rte"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
 
 func TestNew(t *testing.T) {
 	for _, c := range []struct {
-		Name    string
-		Routes  []rte.Route
-		WantErr bool
-		ErrType int
-		ErrIdx  int
-		ErrMsg  string
+		Name     string
+		Routes   []rte.Route
+		WantErr  bool
+		ErrType  int
+		ErrIdx   int
+		ErrMsg   string
+		CauseMsg string
 	}{
 		{
 			Name: "emptyNoErr",
@@ -96,6 +99,7 @@ func TestNew(t *testing.T) {
 			ErrIdx:  0,
 			ErrMsg: `route 0 "GET /:whoo": handler has an unsupported signature: unknown handler type: ` +
 				`func(http.ResponseWriter, *http.Request, int)`,
+			CauseMsg: `unknown handler type: func(http.ResponseWriter, *http.Request, int)`,
 		},
 		{
 			Name: "mismatched param counts",
@@ -124,6 +128,17 @@ func TestNew(t *testing.T) {
 					t.Fatalf("expected error to occur with route %v, but got route %v", c.ErrIdx, e.Idx)
 				case e.Error() != c.ErrMsg:
 					t.Fatalf("expected error message %v, but got %v", c.ErrMsg, e.Error())
+				}
+
+				if c.CauseMsg != "" {
+					causeMsg := ""
+					if e.Cause() != nil {
+						causeMsg = e.Cause().Error()
+					}
+
+					if c.CauseMsg != causeMsg {
+						t.Fatalf("wanted %q as a cause but got %q", c.CauseMsg, causeMsg)
+					}
 				}
 			}
 		})
@@ -259,6 +274,212 @@ func Test_matchPath(t *testing.T) {
 
 			if body := strings.TrimSpace(w.Body.String()); body != tt.body {
 				t.Fatalf("resp: got %#v, want %#v", body, tt.body)
+			}
+		})
+	}
+}
+
+func TestMiddleware(t *testing.T) {
+	for _, c := range []struct {
+		Name     string
+		MW       rte.MiddlewareFunc
+		WantCode int
+		WantBody string
+	}{
+		{
+			"pass-through",
+			func(w http.ResponseWriter, r *http.Request, next http.Handler) {
+				next.ServeHTTP(w, r)
+			},
+			200,
+			"hullo\n",
+		},
+		{
+			"before",
+			func(w http.ResponseWriter, r *http.Request, next http.Handler) {
+				_, _ = fmt.Fprintln(w, "oh hey")
+				next.ServeHTTP(w, r)
+			},
+			200,
+			"oh hey\nhullo\n",
+		},
+		{
+			"skip",
+			func(w http.ResponseWriter, r *http.Request, next http.Handler) {
+				_, _ = fmt.Fprintln(w, "oh hey")
+			},
+			200,
+			"oh hey\n",
+		},
+		{
+			"both sides",
+			func(w http.ResponseWriter, r *http.Request, next http.Handler) {
+				_, _ = fmt.Fprintln(w, "oh hey")
+				next.ServeHTTP(w, r)
+				_, _ = fmt.Fprintln(w, "bye")
+			},
+			200,
+			"oh hey\nhullo\nbye\n",
+		},
+	} {
+		t.Run(c.Name, func(t *testing.T) {
+			tbl := rte.Must(rte.Routes(
+				"GET /",
+				func(w http.ResponseWriter, r *http.Request) {
+					_, _ = fmt.Fprintln(w, "hullo")
+				},
+				c.MW,
+			))
+
+			w := httptest.NewRecorder()
+			tbl.ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
+
+			if w.Code != c.WantCode {
+				t.Fatalf("Got %v, want %v", w.Code, c.WantCode)
+			}
+
+			if w.Body.String() != c.WantBody {
+				t.Fatalf("Got %v, want %v", w.Body, c.WantBody)
+			}
+		})
+	}
+}
+
+type mockH bool
+
+func (m mockH) ServeHTTP(w http.ResponseWriter, r *http.Request) {}
+
+type mockMW bool
+
+func (mockMW) Handle(w http.ResponseWriter, r *http.Request, next http.Handler) {
+}
+
+func TestRoutes(t *testing.T) {
+
+	panics := func(t *testing.T, f func(), want interface{}) {
+		defer func() {
+			p := recover()
+			if p == nil {
+				t.Fatal("Wanted panic but didn't")
+			}
+			if p != want {
+				t.Fatalf("Wanted panic of %q but got %q", want, p)
+			}
+		}()
+		f()
+	}
+
+	noPanic := func(t *testing.T, f func()) {
+		defer func() {
+			p := recover()
+			if p != nil {
+				t.Fatalf("wanted no panic but got %v", p)
+			}
+		}()
+		f()
+	}
+
+	h := mockH(true)
+	mw := mockMW(true)
+
+	for _, c := range []struct {
+		Name       string
+		Args       []interface{}
+		PanicVal   interface{}
+		WantResult []rte.Route
+	}{
+		{
+			Name: "Empty",
+		},
+		{
+			Name: "Inlines routes",
+			Args: []interface{}{
+				[]rte.Route{{Method: "POST", Path: "/"}},
+				"GET /blah", h,
+			},
+			WantResult: []rte.Route{
+				{Method: "POST", Path: "/"},
+				{Method: "GET", Path: "/blah", Handler: h},
+			},
+		},
+		{
+			Name: "Inlines routes",
+			Args: []interface{}{
+				[]rte.Route{{Method: "POST", Path: "/"}},
+				"GET /blah", h,
+			},
+			WantResult: []rte.Route{
+				{Method: "POST", Path: "/"},
+				{Method: "GET", Path: "/blah", Handler: h},
+			},
+		},
+		{
+			Name: "adds mw",
+			Args: []interface{}{
+				"GET /blah", h, mw,
+				"POST /hoo", h,
+			},
+			WantResult: []rte.Route{
+				{Method: "GET", Path: "/blah", Handler: h, Middleware: mw},
+				{Method: "POST", Path: "/hoo", Handler: h},
+			},
+		},
+		{
+			Name: "skips nil",
+			Args: []interface{}{
+				"GET /blah", h,
+				nil,
+				"POST /hoo", h, mw,
+			},
+			WantResult: []rte.Route{
+				{Method: "GET", Path: "/blah", Handler: h},
+				{Method: "POST", Path: "/hoo", Handler: h, Middleware: mw},
+			},
+		},
+		{
+			Name: "invalid request line",
+			Args: []interface{}{
+				"BLAH", h,
+			},
+			PanicVal: `rte.Routes: argument 0 must match "^(\\S+)\\s+(.+)$" but got "BLAH"`,
+		},
+		{
+			Name: "not a []route or string",
+			Args: []interface{}{
+				23,
+			},
+			PanicVal: `rte.Routes: argument 0 must be either a string or a []Route but got 23`,
+		},
+		{
+			Name: "cuts off early",
+			Args: []interface{}{
+				"GET /",
+			},
+			PanicVal: `rte.Routes: missing a handler for "GET /" at argument 1`,
+		},
+		{
+			Name: "invalid handler",
+			Args: []interface{}{
+				"GET /", func() {},
+			},
+			PanicVal: "rte.Routes: invalid handler for \"GET /\" in position 1: unknown handler type: func()",
+		},
+	} {
+		t.Run(c.Name, func(t *testing.T) {
+			if c.PanicVal != nil {
+				panics(t, func() {
+					rte.Routes(c.Args...)
+				}, c.PanicVal)
+				return
+			}
+
+			var result []rte.Route
+			noPanic(t, func() {
+				result = rte.Routes(c.Args...)
+			})
+
+			if !reflect.DeepEqual(result, c.WantResult) {
+				t.Fatalf("results unequal: want %#v, got %#v", c.WantResult, result)
 			}
 		})
 	}

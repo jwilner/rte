@@ -27,13 +27,21 @@ const (
 	wildcard, wildcardSlash = "*", "*/"
 )
 
-var reqLine = regexp.MustCompile(`^(\S+)\s+(.+)$`)
+var regexpReqLine = regexp.MustCompile(`^(\S+)\s+(.+)$`)
 
-// Handler is the type used to wrap the client-provided interface{}
-type Handler = funcs.Handler
+// Middleware is shorthand for a function which can handle or modify a request, optionally invoke the next
+// handler (or not), and modify (or set) a response.
+type Middleware interface {
+	Handle(w http.ResponseWriter, r *http.Request, next http.Handler)
+}
 
-// Middleware is shorthand for a function which takes in a handler and returns another
-type Middleware = func(Handler) Handler
+// MiddlewareFunc is an adapter type permitting regular functions to be used as Middleware
+type MiddlewareFunc func(w http.ResponseWriter, r *http.Request, next http.Handler)
+
+// Handle applies wrapping behavior to a request handler
+func (f MiddlewareFunc) Handle(w http.ResponseWriter, r *http.Request, next http.Handler) {
+	f(w, r, next)
+}
 
 // Route is data for routing to a handler
 type Route struct {
@@ -121,6 +129,11 @@ func Routes(is ...interface{}) []Route {
 
 	idxReqLine := 0
 	for idxReqLine < len(is) {
+		if is[idxReqLine] == nil {
+			idxReqLine++
+			continue
+		}
+
 		if rs, ok := is[idxReqLine].([]Route); ok {
 			routes = append(routes, rs...)
 			idxReqLine++
@@ -131,23 +144,38 @@ func Routes(is ...interface{}) []Route {
 		{
 			str, ok := is[idxReqLine].(string)
 			if !ok {
-				panic(fmt.Sprintf("value %d must be either a string or a []Route", idxReqLine))
+				panic(fmt.Sprintf(
+					"rte.Routes: argument %d must be either a string or a []Route but got %v",
+					idxReqLine,
+					is[idxReqLine],
+				))
 			}
 
-			match := reqLine.FindStringSubmatch(str)
+			match := regexpReqLine.FindStringSubmatch(str)
 			if len(match) == 0 {
-				panic(fmt.Sprintf("value %d must match %q but got %q", idxReqLine, reqLine, match))
+				panic(fmt.Sprintf("rte.Routes: argument %d must match %q but got %q", idxReqLine, regexpReqLine, str))
 			}
 			r.Method, r.Path = match[1], match[2]
 		}
 
 		idxHandler, idxMW := idxReqLine+1, idxReqLine+2
 		if idxHandler >= len(is) {
-			panic(fmt.Sprintf("Missing a handler for %d", idxHandler))
+			panic(fmt.Sprintf(
+				"rte.Routes: missing a handler for \"%v %v\" at argument %d",
+				r.Method,
+				r.Path,
+				idxHandler,
+			))
 		}
 
 		if _, _, err := funcs.Convert(is[idxHandler]); err != nil {
-			panic(err)
+			panic(fmt.Sprintf(
+				"rte.Routes: invalid handler for \"%v %v\" in position %v: %v",
+				r.Method,
+				r.Path,
+				idxHandler,
+				err,
+			))
 		}
 		r.Handler = is[idxHandler]
 
@@ -228,7 +256,7 @@ func New(routes []Route) (*Table, error) {
 		}
 
 		if r.Middleware != nil {
-			h = r.Middleware(h)
+			h = applyMiddleware(h, r.Middleware)
 		}
 
 		n.methods[r.Method] = h
@@ -241,6 +269,14 @@ func New(routes []Route) (*Table, error) {
 
 func newNode() *node {
 	return &node{children: make(map[string]*node), methods: make(map[string]funcs.Handler)}
+}
+
+func applyMiddleware(h funcs.Handler, mw Middleware) funcs.Handler {
+	return func(w http.ResponseWriter, r *http.Request, pathVars funcs.PathVars) {
+		mw.Handle(w, r, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h(w, r, pathVars)
+		}))
+	}
 }
 
 func normalize(seg string) (string, error) {

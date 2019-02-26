@@ -12,98 +12,103 @@ import (
 
 func TestFuncs(t *testing.T) {
 	for _, c := range []struct {
-		Name     string
-		Route    string
-		Path     string
-		Handler  interface{}
-		Expected string
+		Name, Route, Path string
+		Handler           interface{}
+		ErrMsg, Expected  string
 	}{
 		{
-			"func0-handler",
-			"/",
-			"/",
-			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			Name:    "invalid-handler",
+			Route:   "/",
+			Path:    "/",
+			Handler: func() {},
+			ErrMsg:  "route 0 \"GET /\": handler has an unsupported signature: unknown handler type: func()",
+		},
+		{
+			Name:  "func0-handler",
+			Route: "/",
+			Path:  "/",
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				_ = json.NewEncoder(w).Encode([]string{})
 			}),
-			"[]\n",
+			Expected: "[]\n",
 		},
 		{
-			"func0",
-			"/",
-			"/",
-			func(w http.ResponseWriter, r *http.Request) {
+			Name:  "func0",
+			Route: "/",
+			Path:  "/",
+			Handler: func(w http.ResponseWriter, r *http.Request) {
 				_ = json.NewEncoder(w).Encode([]string{})
 			},
-			"[]\n",
+			Expected: "[]\n",
 		},
 		{
-			"func1",
-			"/:var-p0",
-			"/p0",
-			func(w http.ResponseWriter, r *http.Request, p0 string) {
+			Name:  "func1",
+			Route: "/:var-p0",
+			Path:  "/p0",
+			Handler: func(w http.ResponseWriter, r *http.Request, p0 string) {
 				_ = json.NewEncoder(w).Encode([]string{
 					p0,
 				})
 			},
-			"[\"p0\"]\n",
+			Expected: "[\"p0\"]\n",
 		},
 		{
-			"arrFunc1",
-			"/:var-p0",
-			"/p0",
-			func(w http.ResponseWriter, r *http.Request, pVars [1]string) {
+			Name:  "arrFunc1",
+			Route: "/:var-p0",
+			Path:  "/p0",
+			Handler: func(w http.ResponseWriter, r *http.Request, pVars [1]string) {
 				_ = json.NewEncoder(w).Encode(pVars)
 			},
-			"[\"p0\"]\n",
+			Expected: "[\"p0\"]\n",
 		},
 		{
-			"func2",
-			"/:var-p0/:var-p1",
-			"/p0/p1",
-			func(w http.ResponseWriter, r *http.Request, p0, p1 string) {
+			Name:  "func2",
+			Route: "/:var-p0/:var-p1",
+			Path:  "/p0/p1",
+			Handler: func(w http.ResponseWriter, r *http.Request, p0, p1 string) {
 				_ = json.NewEncoder(w).Encode([]string{
 					p0,
 					p1,
 				})
 			},
-			"[\"p0\",\"p1\"]\n",
+			Expected: "[\"p0\",\"p1\"]\n",
 		},
 		{
-			"arrFunc2",
-			"/:var-p0/:var-p1",
-			"/p0/p1",
-			func(w http.ResponseWriter, r *http.Request, pVars [2]string) {
+			Name:  "arrFunc2",
+			Route: "/:var-p0/:var-p1",
+			Path:  "/p0/p1",
+			Handler: func(w http.ResponseWriter, r *http.Request, pVars [2]string) {
 				_ = json.NewEncoder(w).Encode(pVars)
 			},
-			"[\"p0\",\"p1\"]\n",
+			Expected: "[\"p0\",\"p1\"]\n",
 		},
 		{
-			"func3",
-			"/:var-p0/:var-p1/:var-p2",
-			"/p0/p1/p2",
-			func(w http.ResponseWriter, r *http.Request, p0, p1, p2 string) {
+			Name:  "func3",
+			Route: "/:var-p0/:var-p1/:var-p2",
+			Path:  "/p0/p1/p2",
+			Handler: func(w http.ResponseWriter, r *http.Request, p0, p1, p2 string) {
 				_ = json.NewEncoder(w).Encode([]string{
 					p0,
 					p1,
 					p2,
 				})
 			},
-			"[\"p0\",\"p1\",\"p2\"]\n",
+			Expected: "[\"p0\",\"p1\",\"p2\"]\n",
 		},
 		{
-			"arrFunc3",
-			"/:var-p0/:var-p1/:var-p2",
-			"/p0/p1/p2",
-			func(w http.ResponseWriter, r *http.Request, pVars [3]string) {
+			Name:  "arrFunc3",
+			Route: "/:var-p0/:var-p1/:var-p2",
+			Path:  "/p0/p1/p2",
+			Handler: func(w http.ResponseWriter, r *http.Request, pVars [3]string) {
 				_ = json.NewEncoder(w).Encode(pVars)
 			},
-			"[\"p0\",\"p1\",\"p2\"]\n",
+			Expected: "[\"p0\",\"p1\",\"p2\"]\n",
 		},
 		{
-			"func4",
-			"/:var-p0/:var-p1/:var-p2/:var-p3",
-			"/p0/p1/p2/p3",
-			func(w http.ResponseWriter, r *http.Request, p0, p1, p2, p3 string) {
+			Name:  "func4",
+			Route: "/:var-p0/:var-p1/:var-p2/:var-p3",
+			Path:  "/p0/p1/p2/p3",
+			Handler: func(w http.ResponseWriter, r *http.Request, p0, p1, p2, p3 string) {
 				_ = json.NewEncoder(w).Encode([]string{
 					p0,
 					p1,
@@ -111,56 +116,56 @@ func TestFuncs(t *testing.T) {
 					p3,
 				})
 			},
-			"[\"p0\",\"p1\",\"p2\",\"p3\"]\n",
+			Expected: "[\"p0\",\"p1\",\"p2\",\"p3\"]\n",
 		},
 		{
-			"arrFunc4",
-			"/:var-p0/:var-p1/:var-p2/:var-p3",
-			"/p0/p1/p2/p3",
-			func(w http.ResponseWriter, r *http.Request, pVars [4]string) {
+			Name:  "arrFunc4",
+			Route: "/:var-p0/:var-p1/:var-p2/:var-p3",
+			Path:  "/p0/p1/p2/p3",
+			Handler: func(w http.ResponseWriter, r *http.Request, pVars [4]string) {
 				_ = json.NewEncoder(w).Encode(pVars)
 			},
-			"[\"p0\",\"p1\",\"p2\",\"p3\"]\n",
+			Expected: "[\"p0\",\"p1\",\"p2\",\"p3\"]\n",
 		},
 		{
-			"arrFunc5",
-			"/:var-p0/:var-p1/:var-p2/:var-p3/:var-p4",
-			"/p0/p1/p2/p3/p4",
-			func(w http.ResponseWriter, r *http.Request, pVars [5]string) {
+			Name:  "arrFunc5",
+			Route: "/:var-p0/:var-p1/:var-p2/:var-p3/:var-p4",
+			Path:  "/p0/p1/p2/p3/p4",
+			Handler: func(w http.ResponseWriter, r *http.Request, pVars [5]string) {
 				_ = json.NewEncoder(w).Encode(pVars)
 			},
-			"[\"p0\",\"p1\",\"p2\",\"p3\",\"p4\"]\n",
+			Expected: "[\"p0\",\"p1\",\"p2\",\"p3\",\"p4\"]\n",
 		},
 		{
-			"arrFunc6",
-			"/:var-p0/:var-p1/:var-p2/:var-p3/:var-p4/:var-p5",
-			"/p0/p1/p2/p3/p4/p5",
-			func(w http.ResponseWriter, r *http.Request, pVars [6]string) {
+			Name:  "arrFunc6",
+			Route: "/:var-p0/:var-p1/:var-p2/:var-p3/:var-p4/:var-p5",
+			Path:  "/p0/p1/p2/p3/p4/p5",
+			Handler: func(w http.ResponseWriter, r *http.Request, pVars [6]string) {
 				_ = json.NewEncoder(w).Encode(pVars)
 			},
-			"[\"p0\",\"p1\",\"p2\",\"p3\",\"p4\",\"p5\"]\n",
+			Expected: "[\"p0\",\"p1\",\"p2\",\"p3\",\"p4\",\"p5\"]\n",
 		},
 		{
-			"arrFunc7",
-			"/:var-p0/:var-p1/:var-p2/:var-p3/:var-p4/:var-p5/:var-p6",
-			"/p0/p1/p2/p3/p4/p5/p6",
-			func(w http.ResponseWriter, r *http.Request, pVars [7]string) {
+			Name:  "arrFunc7",
+			Route: "/:var-p0/:var-p1/:var-p2/:var-p3/:var-p4/:var-p5/:var-p6",
+			Path:  "/p0/p1/p2/p3/p4/p5/p6",
+			Handler: func(w http.ResponseWriter, r *http.Request, pVars [7]string) {
 				_ = json.NewEncoder(w).Encode(pVars)
 			},
-			"[\"p0\",\"p1\",\"p2\",\"p3\",\"p4\",\"p5\",\"p6\"]\n",
+			Expected: "[\"p0\",\"p1\",\"p2\",\"p3\",\"p4\",\"p5\",\"p6\"]\n",
 		},
 		{
-			"arrFunc8",
-			"/:var-p0/:var-p1/:var-p2/:var-p3/:var-p4/:var-p5/:var-p6/:var-p7",
-			"/p0/p1/p2/p3/p4/p5/p6/p7",
-			func(w http.ResponseWriter, r *http.Request, pVars [8]string) {
+			Name:  "arrFunc8",
+			Route: "/:var-p0/:var-p1/:var-p2/:var-p3/:var-p4/:var-p5/:var-p6/:var-p7",
+			Path:  "/p0/p1/p2/p3/p4/p5/p6/p7",
+			Handler: func(w http.ResponseWriter, r *http.Request, pVars [8]string) {
 				_ = json.NewEncoder(w).Encode(pVars)
 			},
-			"[\"p0\",\"p1\",\"p2\",\"p3\",\"p4\",\"p5\",\"p6\",\"p7\"]\n",
+			Expected: "[\"p0\",\"p1\",\"p2\",\"p3\",\"p4\",\"p5\",\"p6\",\"p7\"]\n",
 		},
 	} {
 		t.Run(c.Name, func(t *testing.T) {
-			tbl := rte.Must([]rte.Route{
+			tbl, err := rte.New([]rte.Route{
 				{
 					Method:  "GET",
 					Path:    c.Route,
@@ -168,11 +173,21 @@ func TestFuncs(t *testing.T) {
 				},
 			})
 
-			w := httptest.NewRecorder()
-			tbl.ServeHTTP(w, httptest.NewRequest("GET", c.Path, nil))
+			if c.ErrMsg != "" {
+				found := ""
+				if err != nil {
+					found = err.Error()
+				}
+				if found != c.ErrMsg {
+					t.Fatalf("Wanted error %q but got %q", c.ErrMsg, found)
+				}
+			} else {
+				w := httptest.NewRecorder()
+				tbl.ServeHTTP(w, httptest.NewRequest("GET", c.Path, nil))
 
-			if body := w.Body.String(); body != c.Expected {
-				t.Fatalf("resp: got %q, %q", body, c.Expected)
+				if body := w.Body.String(); body != c.Expected {
+					t.Fatalf("resp: got %q, %q", body, c.Expected)
+				}
 			}
 		})
 	}

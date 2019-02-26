@@ -22,59 +22,74 @@ import (
 
 func TestFuncs(t *testing.T) {
 	for _, c := range []struct {
-		Name     string
-		Route 	 string
-		Path 	 string
-		Handler  interface{}
-		Expected string
+		Name, Route, Path string
+		Handler  		  interface{}
+		ErrMsg, Expected  string
 	} {
 		{
-			"func0-handler",
-			"/",
-			"/",
-			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			Name:    "invalid-handler",
+			Route:   "/",
+			Path:    "/",
+			Handler: func(){},
+			ErrMsg:  "route 0 \"GET /\": handler has an unsupported signature: unknown handler type: func()",
+		},
+		{
+			Name:     "func0-handler",
+			Route:    "/",
+			Path:     "/",
+			Handler:  http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				_ = json.NewEncoder(w).Encode([]string {})
 			}),
-			"[]\n",
+			Expected: "[]\n",
 		},
 {{- range $sig := $.Signatures }}
 		{
-			"{{ .Name }}",
-			"/{{ range $idx, $p := .PNames }}{{ if $idx }}/{{ end }}:var-{{ $p }}{{ end }}",
-			"/{{ range $idx, $p := .PNames }}{{ if $idx }}/{{ end }}{{ $p }}{{ end }}",
+			Name:     "{{ .Name }}",
+			Route:    "/{{ range $idx, $p := .PNames }}{{ if $idx }}/{{ end }}:var-{{ $p }}{{ end }}",
+			Path:     "/{{ range $idx, $p := .PNames }}{{ if $idx }}/{{ end }}{{ $p }}{{ end }}",
 {{- if and (not .Arr) (gt .Count 0) }}
-			func(w http.ResponseWriter, r *http.Request, {{ range $idx, $p := .PNames }}{{ if $idx }}, {{ end }}{{ $p }}{{ end }} string) {
+			Handler:  func(w http.ResponseWriter, r *http.Request, {{ range $idx, $p := .PNames }}{{ if $idx }}, {{ end }}{{ $p }}{{ end }} string) {
 				_ = json.NewEncoder(w).Encode([]string {
 	{{- range $p := .PNames }}
 					{{ $p }},
 	{{- end }}
 				})
 {{- else if eq .Count 0 }}
-			func(w http.ResponseWriter, r *http.Request) {
+			Handler:  func(w http.ResponseWriter, r *http.Request) {
 				_ = json.NewEncoder(w).Encode([]string {})
 {{- else }}
-			func(w http.ResponseWriter, r *http.Request, pVars [{{ .Count }}]string) {
+			Handler:  func(w http.ResponseWriter, r *http.Request, pVars [{{ .Count }}]string) {
 				_ = json.NewEncoder(w).Encode(pVars)
 {{- end }}
 			},
-			"[{{ range $i, $p := .PNames }}{{ if $i }},{{ end }}\"{{ $p }}\"{{ end }}]\n",
+			Expected: "[{{ range $i, $p := .PNames }}{{ if $i }},{{ end }}\"{{ $p }}\"{{ end }}]\n",
 		},
 {{- end }}
 	} {
 		t.Run(c.Name, func(t *testing.T) {
-			tbl := rte.Must([]rte.Route{
+			tbl, err := rte.New([]rte.Route{
 				{
-					Method: "GET",
-					Path: 	c.Route,
+					Method:  "GET",
+					Path: 	 c.Route,
 					Handler: c.Handler,
 				},
 			})
 
-			w := httptest.NewRecorder()
-			tbl.ServeHTTP(w, httptest.NewRequest("GET", c.Path, nil))
+			if c.ErrMsg != "" {
+				found := ""
+				if err != nil {
+					found = err.Error()
+				}
+				if found != c.ErrMsg {
+					t.Fatalf("Wanted error %q but got %q", c.ErrMsg, found)
+				}
+			} else {
+				w := httptest.NewRecorder()
+				tbl.ServeHTTP(w, httptest.NewRequest("GET", c.Path, nil))
 
-			if body := w.Body.String(); body != c.Expected {
-				t.Fatalf("resp: got %q, %q", body, c.Expected)
+				if body := w.Body.String(); body != c.Expected {
+					t.Fatalf("resp: got %q, %q", body, c.Expected)
+				}
 			}
 		})
 	}
