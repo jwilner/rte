@@ -2,6 +2,7 @@
 
 [![Build Status](https://travis-ci.com/jwilner/rte.svg?branch=master)](https://travis-ci.com/jwilner/rte)
 [![Go Report Card](https://goreportcard.com/badge/github.com/jwilner/rte)](https://goreportcard.com/report/github.com/jwilner/rte)
+[![GoDoc](https://godoc.org/github.com/jwilner/rte?status.svg)](https://godoc.org/github.com/jwilner/rte)
 
 Dead simple, opinionated, performant routing.
 
