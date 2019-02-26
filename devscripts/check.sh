@@ -13,8 +13,8 @@ function main {
         exit 1
     fi
 
-    go run cmd/rte-gen/*.go -max-vars "${max_vars}" -output - | diff internal/funcs/funcs.go -
-    go run cmd/rte-gen/*.go -max-vars "${max_vars}" -test-output - | diff internal/funcs/funcs_test.go -
+    go run ./internal/cmd/rte-gen -max-vars "${max_vars}" -output - | diff internal/funcs/funcs.go -
+    go run ./internal/cmd/rte-gen -max-vars "${max_vars}" -test-output - | diff internal/funcs/funcs_test.go -
 
     go vet ./...
 
