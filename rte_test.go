@@ -250,7 +250,7 @@ func Test_matchPath(t *testing.T) {
 			"match-method-not-allowed",
 			httptest.NewRequest("GET", "/abc/123", nil),
 			rte.Route{
-				Method: rte.MethodNotAllowed, Path: "/:foo/:bar",
+				Method: rte.MethodAll, Path: "/:foo/:bar",
 				Handler: func(w http.ResponseWriter, r *http.Request, foo, bar string) {
 					w.WriteHeader(http.StatusMethodNotAllowed)
 					_ = json.NewEncoder(w).Encode([]string{foo, bar})
@@ -403,9 +403,9 @@ func TestRoutes(t *testing.T) {
 			},
 		},
 		{
-			Name: "Inlines routes",
+			Name: "Inlines solitary route",
 			Args: []interface{}{
-				[]rte.Route{{Method: "POST", Path: "/"}},
+				rte.Route{Method: "POST", Path: "/"},
 				"GET /blah", h,
 			},
 			WantResult: []rte.Route{
@@ -437,18 +437,38 @@ func TestRoutes(t *testing.T) {
 			},
 		},
 		{
-			Name: "invalid request line",
+			Name: "method only",
 			Args: []interface{}{
 				"BLAH", h,
 			},
-			PanicVal: `rte.Routes: argument 0 must match "^(\\S+)\\s+(.+)$" but got "BLAH"`,
+			WantResult: []rte.Route{
+				{Method: "BLAH", Handler: h},
+			},
+		},
+		{
+			Name: "path only",
+			Args: []interface{}{
+				"/blah", h,
+			},
+			WantResult: []rte.Route{
+				{Path: "/blah", Handler: h},
+			},
+		},
+		{
+			Name: "empty method",
+			Args: []interface{}{
+				"", h,
+			},
+			WantResult: []rte.Route{
+				{Handler: h},
+			},
 		},
 		{
 			Name: "not a []route or string",
 			Args: []interface{}{
 				23,
 			},
-			PanicVal: `rte.Routes: argument 0 must be either a string or a []Route but got 23`,
+			PanicVal: `rte.Routes: argument 0 must be either a string, a Route, or a []Route but got int: 23`,
 		},
 		{
 			Name: "cuts off early",
@@ -483,6 +503,32 @@ func TestRoutes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func ExampleRoutes() {
+	routes := rte.Prefix("/my-resource", rte.Routes(
+		"POST", func(w http.ResponseWriter, r *http.Request) {
+			// create
+		},
+		rte.Prefix("/:id", rte.Routes(
+			"GET", func(w http.ResponseWriter, r *http.Request, id string) {
+				// read
+			},
+			"PUT", func(w http.ResponseWriter, r *http.Request, id string) {
+				// update
+			},
+			"DELETE", func(w http.ResponseWriter, r *http.Request, id string) {
+				// delete
+			},
+			rte.MethodAll, func(w http.ResponseWriter, r *http.Request, id string) {
+				// serve a 405
+			},
+		)),
+	))
+
+	fmt.Printf("%q", routes)
+
+	// Output: ["POST /my-resource" "GET /my-resource/:id" "PUT /my-resource/:id" "DELETE /my-resource/:id" "~ /my-resource/:id"]
 }
 
 func ExampleOptTrailingSlash() {

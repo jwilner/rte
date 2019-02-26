@@ -7,27 +7,24 @@ import (
 	"fmt"
 	"github.com/jwilner/rte/internal/funcs"
 	"net/http"
-	"regexp"
 	"strings"
 )
 
 const (
-	// MethodNotAllowed can be provided used as a method within a route to handle scenarios when the path but not
+	// MethodAll can be provided used as a method within a route to handle scenarios when the path but not
 	// the method are matched.
 	//
 	// E.g., serve gets on '/foo/:foo_id' and return a 405 for everything else (405 handler can also access path vars):
 	// 		_ = rte.Must(rte.Routes(
 	// 			"GET /foo/:foo_id", handlerGet,
-	// 			rte.MethodNotAllowed + " /foo/:foo_id", handler405,
+	// 			rte.MethodAll + " /foo/:foo_id", handler405,
 	// 		))
-	MethodNotAllowed = "405"
+	MethodAll = "~"
 )
 
 const (
 	wildcard, wildcardSlash = "*", "*/"
 )
-
-var regexpReqLine = regexp.MustCompile(`^(\S+)\s+(.+)$`)
 
 // Middleware is shorthand for a function which can handle or modify a request, optionally invoke the next
 // handler (or not), and modify (or set) a response.
@@ -134,28 +131,39 @@ func Routes(is ...interface{}) []Route {
 			continue
 		}
 
-		if rs, ok := is[idxReqLine].([]Route); ok {
-			routes = append(routes, rs...)
+		switch v := is[idxReqLine].(type) {
+		case Route:
+			routes = append(routes, v)
 			idxReqLine++
 			continue
+		case []Route:
+			routes = append(routes, v...)
+			idxReqLine++
+			continue
+		case string:
+			// continues below
+		default:
+			panic(fmt.Sprintf(
+				"rte.Routes: argument %d must be either a string, a Route, or a []Route but got %T: %v",
+				idxReqLine,
+				is[idxReqLine],
+				is[idxReqLine],
+			))
 		}
 
-		r := Route{}
+		var r Route
 		{
-			str, ok := is[idxReqLine].(string)
-			if !ok {
-				panic(fmt.Sprintf(
-					"rte.Routes: argument %d must be either a string or a []Route but got %v",
-					idxReqLine,
-					is[idxReqLine],
-				))
+			split := strings.SplitN(is[idxReqLine].(string), " ", 2)
+			switch len(split) {
+			case 2:
+				r.Method, r.Path = split[0], strings.Trim(split[1], " ")
+			case 1:
+				if len(split[0]) > 0 && split[0][0] == '/' {
+					r.Path = split[0]
+				} else {
+					r.Method = split[0]
+				}
 			}
-
-			match := regexpReqLine.FindStringSubmatch(str)
-			if len(match) == 0 {
-				panic(fmt.Sprintf("rte.Routes: argument %d must match %q but got %q", idxReqLine, regexpReqLine, str))
-			}
-			r.Method, r.Path = match[1], match[2]
 		}
 
 		idxHandler, idxMW := idxReqLine+1, idxReqLine+2
@@ -336,7 +344,7 @@ func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h, ok := node.methods[MethodNotAllowed]; ok {
+	if h, ok := node.methods[MethodAll]; ok {
 		h(w, r, params)
 		return
 	}
