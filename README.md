@@ -19,15 +19,26 @@ import (
 )
 
 func main() {
-    http.Handle("/", rte.Must(rte.Routes(
-        "GET /foo/:foo_name/bar/:bar_id", 
-        func(w http.ResponseWriter, r *http.Request, fooName, barID string) {
-            _, _ = fmt.Fprintf(w, "fooName: %v, barID: %v\n", fooName, barID)
-        },
-        "POST /foo", 
-        func(w http.ResponseWriter, _ *http.Request) {
-            _, _ = w.Write([]byte("handled by foo"))
-        },
+    http.Handle("/", rte.Must(rte.Prefix(
+        "/my-resource", rte.Routes(
+            "POST", func(w http.ResponseWriter, r *http.Request) {
+                // create
+            },
+            rte.Prefix("/:id", rte.Routes(
+                "GET", func(w http.ResponseWriter, r *http.Request, id string) {
+                    // read
+                },
+                "PUT", func(w http.ResponseWriter, r *http.Request, id string) {
+                    // update
+                },
+                "DELETE", func(w http.ResponseWriter, r *http.Request, id string) {
+                    // delete
+                },
+                rte.MethodAll, func(w http.ResponseWriter, r *http.Request, id string) {
+                    // serve a 405
+                },
+            )),
+        ),
     )))
 }
 ```
