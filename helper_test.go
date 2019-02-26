@@ -1,6 +1,7 @@
-package rte
+package rte_test
 
 import (
+	"github.com/jwilner/rte"
 	"reflect"
 	"testing"
 )
@@ -8,7 +9,7 @@ import (
 func TestOptTrailingSlash(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
-		in, want []Route
+		in, want []rte.Route
 	}{
 		{
 			"empty",
@@ -17,27 +18,27 @@ func TestOptTrailingSlash(t *testing.T) {
 		},
 		{
 			"addsNoSlash",
-			[]Route{{Method: "GET", Path: "/hi"}},
-			[]Route{{Method: "GET", Path: "/hi"}, {Method: "GET", Path: "/hi/"}},
+			[]rte.Route{{Method: "GET", Path: "/hi"}},
+			[]rte.Route{{Method: "GET", Path: "/hi"}, {Method: "GET", Path: "/hi/"}},
 		},
 		{
 			"addsSlash",
-			[]Route{{Method: "GET", Path: "/hi/"}},
-			[]Route{{Method: "GET", Path: "/hi/"}, {Method: "GET", Path: "/hi"}},
+			[]rte.Route{{Method: "GET", Path: "/hi/"}},
+			[]rte.Route{{Method: "GET", Path: "/hi/"}, {Method: "GET", Path: "/hi"}},
 		},
 		{
 			"unchanged",
-			[]Route{{Method: "GET", Path: "/hi/"}, {Method: "GET", Path: "/hi"}},
-			[]Route{{Method: "GET", Path: "/hi/"}, {Method: "GET", Path: "/hi"}},
+			[]rte.Route{{Method: "GET", Path: "/hi/"}, {Method: "GET", Path: "/hi"}},
+			[]rte.Route{{Method: "GET", Path: "/hi/"}, {Method: "GET", Path: "/hi"}},
 		},
 		{
 			"addsJustOneIfDupe",
-			[]Route{{Method: "GET", Path: "/hi/"}, {Method: "GET", Path: "/hi/"}},
-			[]Route{{Method: "GET", Path: "/hi/"}, {Method: "GET", Path: "/hi"}, {Method: "GET", Path: "/hi/"}},
+			[]rte.Route{{Method: "GET", Path: "/hi/"}, {Method: "GET", Path: "/hi/"}},
+			[]rte.Route{{Method: "GET", Path: "/hi/"}, {Method: "GET", Path: "/hi"}, {Method: "GET", Path: "/hi/"}},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := OptTrailingSlash(tt.in); !reflect.DeepEqual(got, tt.want) {
+			if got := rte.OptTrailingSlash(tt.in); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("OptTrailingSlash() = %v, want %v", got, tt.want)
 			}
 		})
@@ -47,7 +48,7 @@ func TestOptTrailingSlash(t *testing.T) {
 func TestPrefix(t *testing.T) {
 	for _, tt := range []struct {
 		name, prefix string
-		in, want     []Route
+		in, want     []rte.Route
 	}{
 		{
 			"empty",
@@ -58,12 +59,12 @@ func TestPrefix(t *testing.T) {
 		{
 			"adds",
 			"/my-prefix",
-			[]Route{{Path: "/hi"}},
-			[]Route{{Path: "/my-prefix/hi"}},
+			[]rte.Route{{Path: "/hi"}},
+			[]rte.Route{{Path: "/my-prefix/hi"}},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := Prefix(tt.prefix, tt.in); !reflect.DeepEqual(got, tt.want) {
+			if got := rte.Prefix(tt.prefix, tt.in); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Prefix() = %v, want %v", got, tt.want)
 			}
 		})

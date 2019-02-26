@@ -1,4 +1,4 @@
-/**/ package rte_test
+package rte_test
 
 import (
 	"encoding/json"
@@ -483,4 +483,31 @@ func TestRoutes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func ExampleOptTrailingSlash() {
+	routes := rte.OptTrailingSlash(rte.Routes(
+		"GET /", func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprintln(w, "hello world!")
+		},
+		"GET /:name", func(w http.ResponseWriter, r *http.Request, name string) {
+			_, _ = fmt.Fprintf(w, "hello %v!\n", name)
+		},
+	))
+
+	fmt.Printf("%q", routes)
+
+	// Output: ["GET /" "GET /:name" "GET /:name/"]
+}
+
+func ExamplePrefix() {
+	routes := rte.Prefix("/hello", rte.Routes(
+		"GET /", func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprintln(w, "hello")
+		},
+	))
+
+	fmt.Printf("%q", routes)
+
+	// Output: ["GET /hello/"]
 }

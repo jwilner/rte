@@ -31,21 +31,27 @@ func OptTrailingSlash(routes []Route) []Route {
 
 		switch seen[k] {
 		case seenSlash: // only seen slash, add no slash
+			if r.Path == "/" {
+				continue
+			}
+
 			c := r
 			c.Path = r.Path[:len(c.Path)-1]
 
-			if !added[c.Path] {
+			_, k2 := classify(r)
+			if !added[k2] {
 				copied = append(copied, c)
-				added[c.Path] = true
+				added[k2] = true
 			}
 
 		case seenNoSlash:
 			c := r
 			c.Path = r.Path + "/"
 
-			if !added[c.Path] {
+			_, k2 := classify(r)
+			if !added[k2] {
 				copied = append(copied, c)
-				added[c.Path] = true
+				added[k2] = true
 			}
 		}
 	}
