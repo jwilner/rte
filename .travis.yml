@@ -4,9 +4,13 @@ go:
 
 install:
   - go get -u golang.org/x/lint/golint
+  - go get github.com/mattn/goveralls
 
 before_script:
   - make check
 
 script:
-  - make test
+  - make test-cover
+
+after_success:
+  - $HOME/gopath/bin/goveralls -cover=cover.out -service=travis-ci

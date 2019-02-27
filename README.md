@@ -50,8 +50,8 @@ Check out the [Makefile](Makefile) for dev entrypoints.
 
 TLDR:
 - `make test`
-- `make gen` (builds gen binary and regenerates code)
-- `make lint` (runs `golint` -- install with `go get -u golang.org/x/lint/golint`)
+- `make gen` (regenerates internal code)
+- `make check` (requires `golint` -- install with `go get -u golang.org/x/lint/golint`)
 
 ## CI
 
