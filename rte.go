@@ -72,6 +72,8 @@ const (
 	ErrTypeNoInitialSlash
 	// ErrTypeInvalidSegment means there was an invalid segment within a path
 	ErrTypeInvalidSegment
+	// ErrTypeOutOfRange indicates that there are more variables in the path than this version of RTE can handle
+	ErrTypeOutOfRange
 	// ErrTypeDuplicateHandler means more than one handler was provided for the same method and path.
 	ErrTypeDuplicateHandler
 	// ErrTypeConversionFailure means that the provided value can't be converted to a handler
@@ -100,6 +102,8 @@ func (e Error) Error() string {
 		msg = "no initial slash"
 	case ErrTypeInvalidSegment:
 		msg = "invalid segment"
+	case ErrTypeOutOfRange:
+		msg = fmt.Sprintf("path has more than %v parameters", len(funcs.PathVars{}))
 	case ErrTypeDuplicateHandler:
 		msg = "duplicate handler"
 	case ErrTypeConversionFailure:
@@ -217,6 +221,7 @@ func New(routes []Route) (*Table, error) {
 	t := new(Table)
 	t.root = newNode()
 
+	maxVars := len(funcs.PathVars{})
 	for i, r := range routes {
 		if r.Method == "" {
 			return nil, Error{Type: ErrTypeMethodEmpty, Idx: i, Route: r}
@@ -251,6 +256,9 @@ func New(routes []Route) (*Table, error) {
 
 			n = n.children[seg]
 		}
+		if numPathParams > maxVars {
+			return nil, Error{Type: ErrTypeOutOfRange, Idx: i, Route: r}
+		}
 
 		if _, has := n.methods[r.Method]; has {
 			return nil, Error{Type: ErrTypeDuplicateHandler, Idx: i, Route: r}
@@ -260,7 +268,10 @@ func New(routes []Route) (*Table, error) {
 		if err != nil {
 			return nil, Error{Type: ErrTypeConversionFailure, Idx: i, Route: r, cause: err}
 		} else if numPathParams != numHandlerParams {
-			return nil, Error{Type: ErrTypeParamCountMismatch, Idx: i, Route: r}
+			// we permit MethodAll handlers to drop params for the common 405 use case
+			if r.Method != MethodAll || numHandlerParams > numPathParams {
+				return nil, Error{Type: ErrTypeParamCountMismatch, Idx: i, Route: r}
+			}
 		}
 
 		if r.Middleware != nil {

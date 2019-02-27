@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/jwilner/rte"
+	"github.com/jwilner/rte/internal/funcs"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -110,6 +112,48 @@ func TestNew(t *testing.T) {
 			ErrType: rte.ErrTypeParamCountMismatch,
 			ErrIdx:  0,
 			ErrMsg:  `route 0 "GET /:whoo": path and handler have different numbers of parameters`,
+		},
+		{
+			Name: "method all can drop",
+			Routes: rte.Routes(
+				rte.Prefix("/:whoo", rte.Routes(
+					"GET", func(w http.ResponseWriter, r *http.Request, whoo string) {
+
+					},
+					rte.MethodAll, func(w http.ResponseWriter, r *http.Request) {
+						// the number of handler parameters is fewer than path parameters -- special case for MethodAll
+					},
+				)),
+			),
+		},
+		{
+			Name: "method all cannot exceed",
+			Routes: rte.Routes(
+				rte.Prefix("/:whoo", rte.Routes(
+					"GET", func(w http.ResponseWriter, r *http.Request, whoo string) {
+
+					},
+					rte.MethodAll, func(w http.ResponseWriter, r *http.Request, whoo, whee string) {
+					},
+				)),
+			),
+			WantErr: true,
+			ErrType: rte.ErrTypeParamCountMismatch,
+			ErrIdx:  1,
+			ErrMsg:  `route 1 "~ /:whoo": path and handler have different numbers of parameters`,
+		},
+		{
+			Name: "excessively long path",
+			Routes: rte.Routes(
+				"GET "+strings.Repeat("/:whoo", len(funcs.PathVars{})+1),
+				func(w http.ResponseWriter, r *http.Request, _ [8]string) {
+				},
+			),
+			WantErr: true,
+			ErrType: rte.ErrTypeOutOfRange,
+			ErrIdx:  0,
+			ErrMsg: `route 0 "GET ` + strings.Repeat("/:whoo", len(funcs.PathVars{})+1) +
+				`": path has more than ` + strconv.Itoa(len(funcs.PathVars{})) + ` parameters`,
 		},
 	} {
 		t.Run(c.Name, func(t *testing.T) {
