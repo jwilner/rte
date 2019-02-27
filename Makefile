@@ -1,9 +1,12 @@
-.PHONY: test gen check
+.PHONY: test test-cover bench gen check
 
 MAX-VARS := 8
 
 test:
-	go test -cover ./...
+	go test ./...
+
+test-cover:
+	go test -v -covermode=count -coverprofile=cover.out
 
 bench:
 	go test -test.bench=. ./...

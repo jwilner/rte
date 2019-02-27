@@ -3,6 +3,7 @@
 [![Build Status](https://travis-ci.com/jwilner/rte.svg?branch=master)](https://travis-ci.com/jwilner/rte)
 [![Go Report Card](https://goreportcard.com/badge/github.com/jwilner/rte)](https://goreportcard.com/report/github.com/jwilner/rte)
 [![GoDoc](https://godoc.org/github.com/jwilner/rte?status.svg)](https://godoc.org/github.com/jwilner/rte)
+[![Coverage Status](https://coveralls.io/repos/github/jwilner/rte/badge.svg?branch=coverage)](https://coveralls.io/github/jwilner/rte?branch=coverage)
 
 Dead simple, opinionated, performant routing.
 
@@ -50,8 +51,8 @@ Check out the [Makefile](Makefile) for dev entrypoints.
 
 TLDR:
 - `make test`
-- `make gen` (builds gen binary and regenerates code)
-- `make lint` (runs `golint` -- install with `go get -u golang.org/x/lint/golint`)
+- `make gen` (regenerates internal code)
+- `make check` (requires `golint` -- install with `go get -u golang.org/x/lint/golint`)
 
 ## CI
 
