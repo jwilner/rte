@@ -1,7 +1,10 @@
 package rte_test
 
 import (
+	"fmt"
 	"github.com/jwilner/rte"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 )
@@ -113,4 +116,66 @@ func TestDefaultMethod(t *testing.T) {
 			}
 		})
 	}
+}
+
+type stringMW string
+
+func (s stringMW) Handle(w http.ResponseWriter, r *http.Request, next http.Handler) {
+	_, _ = fmt.Fprintf(w, "%s\n", s)
+	next.ServeHTTP(w, r)
+}
+
+func TestGlobalMiddleware(t *testing.T) {
+	mw1 := mockMW(true)
+	t.Run("empty", func(t *testing.T) {
+		rts := rte.GlobalMiddleware(nil, nil)
+		if len(rts) != 0 {
+			t.Errorf("Wanted no routes returned")
+		}
+	})
+	t.Run("nilPassed", func(t *testing.T) {
+		rts := rte.GlobalMiddleware(nil, []rte.Route{
+			{Method: "GET", Path: "/"},
+		})
+		want := []rte.Route{{Method: "GET", Path: "/"}}
+		if !reflect.DeepEqual(rts, want) {
+			t.Errorf("Wanted %v but got %v", want, rts)
+		}
+	})
+	t.Run("nilPassedMwPresent", func(t *testing.T) {
+		rts := rte.GlobalMiddleware(nil, []rte.Route{
+			{Method: "GET", Path: "/", Middleware: mw1},
+		})
+		want := []rte.Route{{Method: "GET", Path: "/", Middleware: mw1}}
+		if !reflect.DeepEqual(rts, want) {
+			t.Errorf("Wanted %v but got %v", want, rts)
+		}
+	})
+	t.Run("setsMW", func(t *testing.T) {
+		rts := rte.GlobalMiddleware(mw1, []rte.Route{
+			{Method: "GET", Path: "/"},
+		})
+		want := []rte.Route{{Method: "GET", Path: "/", Middleware: mw1}}
+		if !reflect.DeepEqual(rts, want) {
+			t.Errorf("Wanted %v but got %v", want, rts)
+		}
+	})
+	t.Run("composes", func(t *testing.T) {
+		tbl := rte.Must(rte.GlobalMiddleware(stringMW("bye"), []rte.Route{
+			{
+				Method:     "GET",
+				Path:       "/",
+				Handler:    func(w http.ResponseWriter, r *http.Request) {},
+				Middleware: stringMW("hi"),
+			},
+		}))
+
+		w := httptest.NewRecorder()
+		tbl.ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
+		res := w.Body.String()
+		want := "hi\nbye\n"
+		if res != want {
+			t.Errorf("Wanted %q but got %q", want, res)
+		}
+	})
 }

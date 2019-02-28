@@ -135,6 +135,7 @@ func Routes(is ...interface{}) []Route {
 			continue
 		}
 
+		var reqLine string
 		switch v := is[idxReqLine].(type) {
 		case Route:
 			routes = append(routes, v)
@@ -145,7 +146,7 @@ func Routes(is ...interface{}) []Route {
 			idxReqLine++
 			continue
 		case string:
-			// continues below
+			reqLine = v
 		default:
 			panic(fmt.Sprintf(
 				"rte.Routes: argument %d must be either a string, a Route, or a []Route but got %T: %v",
@@ -155,9 +156,21 @@ func Routes(is ...interface{}) []Route {
 			))
 		}
 
-		var r Route
-		{
-			split := strings.SplitN(is[idxReqLine].(string), " ", 2)
+		idxHandler := idxReqLine + 1
+		if idxHandler >= len(is) {
+			panic(fmt.Sprintf("rte.Routes: missing a target for %q at argument %d", reqLine, idxHandler))
+		}
+
+		var newRoutes []Route
+		switch v := is[idxHandler].(type) {
+		case []Route:
+			if len(reqLine) == 0 || reqLine[0] != '/' {
+				panic(fmt.Sprintf("rte.Routes: if providing []Route as a target, reqLine must be a prefix"))
+			}
+			newRoutes = Prefix(reqLine, v)
+		default:
+			var r Route
+			split := strings.SplitN(reqLine, " ", 2)
 			switch len(split) {
 			case 2:
 				r.Method, r.Path = split[0], strings.Trim(split[1], " ")
@@ -168,40 +181,30 @@ func Routes(is ...interface{}) []Route {
 					r.Method = split[0]
 				}
 			}
+			if _, _, err := funcs.Convert(v); err != nil {
+				panic(fmt.Sprintf(
+					"rte.Routes: invalid handler for \"%v %v\" in position %v: %v",
+					r.Method,
+					r.Path,
+					idxHandler,
+					err,
+				))
+			}
+			r.Handler = v
+
+			newRoutes = []Route{r}
 		}
 
-		idxHandler, idxMW := idxReqLine+1, idxReqLine+2
-		if idxHandler >= len(is) {
-			panic(fmt.Sprintf(
-				"rte.Routes: missing a handler for \"%v %v\" at argument %d",
-				r.Method,
-				r.Path,
-				idxHandler,
-			))
-		}
-
-		if _, _, err := funcs.Convert(is[idxHandler]); err != nil {
-			panic(fmt.Sprintf(
-				"rte.Routes: invalid handler for \"%v %v\" in position %v: %v",
-				r.Method,
-				r.Path,
-				idxHandler,
-				err,
-			))
-		}
-		r.Handler = is[idxHandler]
-
-		if idxMW < len(is) {
+		if idxMW := idxHandler + 1; idxMW < len(is) {
 			if mw, ok := is[idxMW].(Middleware); ok {
-				r.Middleware = mw
-				routes = append(routes, r)
+				routes = append(routes, GlobalMiddleware(mw, newRoutes)...)
 				idxReqLine = idxMW + 1
 				continue
 			}
 		}
 
 		idxReqLine = idxHandler + 1
-		routes = append(routes, r)
+		routes = append(routes, newRoutes...)
 	}
 
 	return routes

@@ -399,6 +399,10 @@ type mockMW bool
 func (mockMW) Handle(w http.ResponseWriter, r *http.Request, next http.Handler) {
 }
 
+func (mockMW) AndThen(mw rte.Middleware) rte.Middleware {
+	return nil
+}
+
 func TestRoutes(t *testing.T) {
 
 	panics := func(t *testing.T, f func(), want interface{}) {
@@ -520,7 +524,7 @@ func TestRoutes(t *testing.T) {
 			Args: []interface{}{
 				"GET /",
 			},
-			PanicVal: `rte.Routes: missing a handler for "GET /" at argument 1`,
+			PanicVal: `rte.Routes: missing a target for "GET /" at argument 1`,
 		},
 		{
 			Name: "invalid handler",
@@ -528,6 +532,42 @@ func TestRoutes(t *testing.T) {
 				"GET /", func() {},
 			},
 			PanicVal: "rte.Routes: invalid handler for \"GET /\" in position 1: unknown handler type: func()",
+		},
+		{
+			Name: "prefix shorthand",
+			Args: []interface{}{
+				"/resources", []rte.Route{
+					{Method: "GET", Path: "/hi"},
+					{Method: "POST", Path: "/bye"},
+				},
+			},
+			WantResult: []rte.Route{
+				{Method: "GET", Path: "/resources/hi"},
+				{Method: "POST", Path: "/resources/bye"},
+			},
+		},
+		{
+			Name: "invalid prefix shorthand",
+			Args: []interface{}{
+				"POST", []rte.Route{
+					{Method: "GET", Path: "/hi"},
+					{Method: "POST", Path: "/bye"},
+				},
+			},
+			PanicVal: "rte.Routes: if providing []Route as a target, reqLine must be a prefix",
+		},
+		{
+			Name: "prefix shorthand middleware",
+			Args: []interface{}{
+				"/resources", []rte.Route{
+					{Method: "GET", Path: "/hi"},
+					{Method: "POST", Path: "/bye"},
+				}, mw,
+			},
+			WantResult: []rte.Route{
+				{Method: "GET", Path: "/resources/hi", Middleware: mw},
+				{Method: "POST", Path: "/resources/bye", Middleware: mw},
+			},
 		},
 	} {
 		t.Run(c.Name, func(t *testing.T) {

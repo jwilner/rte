@@ -46,25 +46,27 @@ func ExampleTable_ServeHTTP() {
 }
 
 func ExampleRoutes() {
-	routes := rte.Prefix("/my-resource", rte.Routes(
-		"POST", func(w http.ResponseWriter, r *http.Request) {
-			// create
-		},
-		rte.Prefix("/:id", rte.Routes(
-			"GET", func(w http.ResponseWriter, r *http.Request, id string) {
-				// read
+	routes := rte.Routes(
+		"/my-resource", rte.Routes(
+			"POST", func(w http.ResponseWriter, r *http.Request) {
+				// create
 			},
-			"PUT", func(w http.ResponseWriter, r *http.Request, id string) {
-				// update
-			},
-			"DELETE", func(w http.ResponseWriter, r *http.Request, id string) {
-				// delete
-			},
-			rte.MethodAll, func(w http.ResponseWriter, r *http.Request, id string) {
-				// serve a 405
-			},
-		)),
-	))
+			"/:id", rte.Routes(
+				"GET", func(w http.ResponseWriter, r *http.Request, id string) {
+					// read
+				},
+				"PUT", func(w http.ResponseWriter, r *http.Request, id string) {
+					// update
+				},
+				"DELETE", func(w http.ResponseWriter, r *http.Request, id string) {
+					// delete
+				},
+				rte.MethodAll, func(w http.ResponseWriter, r *http.Request, id string) {
+					// serve a 405
+				},
+			),
+		),
+	)
 
 	for _, r := range routes {
 		fmt.Printf("%v\n", r)

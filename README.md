@@ -21,26 +21,26 @@ import (
 )
 
 func main() {
-    http.Handle("/", rte.Must(rte.Prefix(
-        "/my-resource", rte.Routes(
-            "POST", func(w http.ResponseWriter, r *http.Request) {
-                // create
-            },
-            rte.Prefix("/:id", rte.Routes(
-                "GET", func(w http.ResponseWriter, r *http.Request, id string) {
-                    // read
-                },
-                "PUT", func(w http.ResponseWriter, r *http.Request, id string) {
-                    // update
-                },
-                "DELETE", func(w http.ResponseWriter, r *http.Request, id string) {
-                    // delete
-                },
-                rte.MethodAll, func(w http.ResponseWriter, r *http.Request, id string) {
-                    // serve a 405
-                },
-            )),
-        ),
+    http.Handle("/", rte.Must(rte.Routes(
+		"/my-resource", rte.Routes(
+			"POST", func(w http.ResponseWriter, r *http.Request) {
+				// create
+			},
+			"/:id", rte.Routes(
+				"GET", func(w http.ResponseWriter, r *http.Request, id string) {
+					// read
+				},
+				"PUT", func(w http.ResponseWriter, r *http.Request, id string) {
+					// update
+				},
+				"DELETE", func(w http.ResponseWriter, r *http.Request, id string) {
+					// delete
+				},
+				rte.MethodAll, func(w http.ResponseWriter, r *http.Request, id string) {
+					// serve a 405
+				},
+			),
+		),
     )))
 }
 ```

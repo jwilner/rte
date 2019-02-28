@@ -1,5 +1,7 @@
 package rte
 
+import "net/http"
+
 // OptTrailingSlash ensures that the provided routes will perform the same regardless of whether or not they have a
 // trailing slash.
 func OptTrailingSlash(routes []Route) []Route {
@@ -82,8 +84,8 @@ func DefaultMethod(hndlr interface{}, routes []Route) []Route {
 	for _, r := range routes {
 		if !defaultSeen[r.Path] {
 			copied = append(copied, r, Route{
-				Method: MethodAll,
-				Path: r.Path,
+				Method:  MethodAll,
+				Path:    r.Path,
 				Handler: hndlr,
 			})
 			defaultSeen[r.Path] = true
@@ -94,4 +96,27 @@ func DefaultMethod(hndlr interface{}, routes []Route) []Route {
 	}
 
 	return copied
+}
+
+func GlobalMiddleware(mw Middleware, routes []Route) []Route {
+	var copied []Route
+	for _, r := range routes {
+		r.Middleware = composeMiddleware(r.Middleware, mw)
+		copied = append(copied, r)
+	}
+	return copied
+}
+
+func composeMiddleware(mw1, mw2 Middleware) Middleware {
+	if mw1 == nil {
+		return mw2
+	}
+	if mw2 == nil {
+		return mw1
+	}
+	return MiddlewareFunc(func(w http.ResponseWriter, r *http.Request, next http.Handler) {
+		mw1.Handle(w, r, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mw2.Handle(w, r, next)
+		}))
+	})
 }
