@@ -68,3 +68,29 @@ func Prefix(prefix string, routes []Route) []Route {
 	}
 	return prefixed
 }
+
+func DefaultMethod(hndlr interface{}, routes []Route) []Route {
+	defaultSeen := make(map[string]bool)
+	for _, r := range routes {
+		if r.Method == MethodAll {
+			defaultSeen[r.Path] = true
+		}
+	}
+
+	var copied []Route
+	for _, r := range routes {
+		if !defaultSeen[r.Path] {
+			copied = append(copied, r, Route{
+				Method: MethodAll,
+				Path: r.Path,
+				Handler: hndlr,
+			})
+			defaultSeen[r.Path] = true
+			continue
+		}
+
+		copied = append(copied, r)
+	}
+
+	return copied
+}

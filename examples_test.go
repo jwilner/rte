@@ -147,3 +147,41 @@ func ExamplePrefix() {
 
 	// Output: GET /hello/
 }
+
+func ExampleDefaultMethod() {
+	hndlr := func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_, _ = fmt.Fprintf(w, "%v %v not allowed", r.Method, r.URL.Path)
+	}
+	routes := rte.DefaultMethod(hndlr, rte.Routes(
+		"GET /foo", func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprintf(w, "GET /foo succeeded")
+		},
+		"POST /bar", func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprintf(w, "POST /bar succeeded")
+		},
+	))
+
+	for _, r := range routes {
+		fmt.Printf("%v\n", r)
+	}
+
+	tbl := rte.Must(routes)
+	{
+		w := httptest.NewRecorder()
+		tbl.ServeHTTP(w, httptest.NewRequest("GET", "/foo", nil))
+		fmt.Println(w.Body.String())
+	}
+	{
+		w := httptest.NewRecorder()
+		tbl.ServeHTTP(w, httptest.NewRequest("PRETEND", "/foo", nil))
+		fmt.Println(w.Body.String())
+	}
+
+	// Output: GET /foo
+	// ~ /foo
+	// POST /bar
+	// ~ /bar
+	// GET /foo succeeded
+	// PRETEND /foo not allowed
+}

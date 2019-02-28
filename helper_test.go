@@ -70,3 +70,47 @@ func TestPrefix(t *testing.T) {
 		})
 	}
 }
+
+func TestDefaultMethod(t *testing.T) {
+	m, m1 := mockH(true), mockH(false)
+	for _, tt := range []struct {
+		name     string
+		handler  interface{}
+		in, want []rte.Route
+	}{
+		{
+			name:    "empty",
+			handler: m,
+		},
+		{
+			name:    "simple",
+			handler: m,
+			in:      rte.Routes("GET /", m1),
+			want:    rte.Routes("GET /", m1, "~ /", m),
+		},
+		{
+			name:    "multi-path",
+			handler: m,
+			in:      rte.Routes("GET /", m1, "POST /foobar", m1),
+			want:    rte.Routes("GET /", m1, "~ /", m, "POST /foobar", m1, "~ /foobar", m),
+		},
+		{
+			name:    "multi-method",
+			handler: m,
+			in:      rte.Routes("GET /", m1, "POST /", m1),
+			want:    rte.Routes("GET /", m1, "~ /", m, "POST /", m1),
+		},
+		{
+			name:    "no-clobber",
+			handler: m,
+			in:      rte.Routes("GET /", m1, "~ /", m1),
+			want:    rte.Routes("GET /", m1, "~ /", m1),
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := rte.DefaultMethod(tt.handler, tt.in); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Prefix() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
