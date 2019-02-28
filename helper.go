@@ -69,6 +69,7 @@ func Prefix(prefix string, routes []Route) []Route {
 	return prefixed
 }
 
+// DefaultMethod adds a default method handler to any paths without one.
 func DefaultMethod(hndlr interface{}, routes []Route) []Route {
 	defaultSeen := make(map[string]bool)
 	for _, r := range routes {
