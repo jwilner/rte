@@ -161,12 +161,12 @@ func TestGlobalMiddleware(t *testing.T) {
 		}
 	})
 	t.Run("composes", func(t *testing.T) {
-		tbl := rte.Must(rte.GlobalMiddleware(stringMW("bye"), []rte.Route{
+		tbl := rte.Must(rte.GlobalMiddleware(stringMW("hi"), []rte.Route{
 			{
 				Method:     "GET",
 				Path:       "/",
 				Handler:    func(w http.ResponseWriter, r *http.Request) {},
-				Middleware: stringMW("hi"),
+				Middleware: stringMW("bye"),
 			},
 		}))
 

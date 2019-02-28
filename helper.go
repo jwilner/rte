@@ -98,10 +98,12 @@ func DefaultMethod(hndlr interface{}, routes []Route) []Route {
 	return copied
 }
 
+// GlobalMiddleware registers a middleware across all provide routes. If a middleware is already set,
+// that middleware will be invoked second.
 func GlobalMiddleware(mw Middleware, routes []Route) []Route {
 	var copied []Route
 	for _, r := range routes {
-		r.Middleware = composeMiddleware(r.Middleware, mw)
+		r.Middleware = composeMiddleware(mw, r.Middleware)
 		copied = append(copied, r)
 	}
 	return copied
