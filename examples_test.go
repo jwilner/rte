@@ -79,7 +79,7 @@ func ExampleRoutes() {
 	// ~ /my-resource/:id
 }
 
-func ExampleRoutes_All() {
+func ExampleRoutes2() {
 	mw := stringMW("abc")
 	rts := rte.Routes(
 		nil,
