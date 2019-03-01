@@ -17,11 +17,12 @@ package main
 import (
     "fmt"
     "github.com/jwilner/rte"
+    "log"
     "net/http"
 )
 
 func main() {
-    http.Handle("/", rte.Must(rte.Routes(
+	tbl := rte.Must(rte.Routes(
         "/my-resource", rte.Routes(
             "POST", func(w http.ResponseWriter, r *http.Request) {
                 // create
@@ -41,7 +42,8 @@ func main() {
                 },
             ),
         ),
-    )))
+    ))
+    log.Fatal(http.ListenAndServe(":8080", tbl))
 }
 ```
 

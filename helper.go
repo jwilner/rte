@@ -1,6 +1,111 @@
 package rte
 
-import "net/http"
+import (
+	"fmt"
+	"github.com/jwilner/rte/internal/funcs"
+	"net/http"
+	"strings"
+)
+
+// Routes is a vanity constructor for constructing literal routing tables. It enforces types at runtime. An invocation
+// can be zero or more combinations. Each combination can be one of:
+// - nil
+// - "METHOD", handler
+// - "METHOD PATH", handler
+// - "PATH", handler
+// - "", handler
+// - "METHOD", handler, middleware
+// - "METHOD PATH", handler, middleware
+// - "PATH", handler, middleware
+// - "", handler, middleware
+// - Route
+// - []Route
+// - "PATH", []Route (identical to rte.Prefix("PATH", routes))
+// - "PATH", []Route, middleware (identical to rte.GlobalMiddleware(rte.Prefix("PATH", routes), middleware))
+func Routes(is ...interface{}) []Route {
+	var routes []Route
+
+	idxReqLine := 0
+	for idxReqLine < len(is) {
+		if is[idxReqLine] == nil {
+			idxReqLine++
+			continue
+		}
+
+		var reqLine string
+		switch v := is[idxReqLine].(type) {
+		case Route:
+			routes = append(routes, v)
+			idxReqLine++
+			continue
+		case []Route:
+			routes = append(routes, v...)
+			idxReqLine++
+			continue
+		case string:
+			reqLine = v
+		default:
+			panic(fmt.Sprintf(
+				"rte.Routes: argument %d must be either a string, a Route, or a []Route but got %T: %v",
+				idxReqLine,
+				is[idxReqLine],
+				is[idxReqLine],
+			))
+		}
+
+		idxHandler := idxReqLine + 1
+		if idxHandler >= len(is) {
+			panic(fmt.Sprintf("rte.Routes: missing a target for %q at argument %d", reqLine, idxHandler))
+		}
+
+		var newRoutes []Route
+		switch v := is[idxHandler].(type) {
+		case []Route:
+			if len(reqLine) == 0 || reqLine[0] != '/' {
+				panic(fmt.Sprintf("rte.Routes: if providing []Route as a target, reqLine must be a prefix"))
+			}
+			newRoutes = Prefix(reqLine, v)
+		default:
+			var r Route
+			split := strings.SplitN(reqLine, " ", 2)
+			switch len(split) {
+			case 2:
+				r.Method, r.Path = split[0], strings.Trim(split[1], " ")
+			case 1:
+				if len(split[0]) > 0 && split[0][0] == '/' {
+					r.Path = split[0]
+				} else {
+					r.Method = split[0]
+				}
+			}
+			if _, _, err := funcs.Convert(v); err != nil {
+				panic(fmt.Sprintf(
+					"rte.Routes: invalid handler for \"%v %v\" in position %v: %v",
+					r.Method,
+					r.Path,
+					idxHandler,
+					err,
+				))
+			}
+			r.Handler = v
+
+			newRoutes = []Route{r}
+		}
+
+		if idxMW := idxHandler + 1; idxMW < len(is) {
+			if mw, ok := is[idxMW].(Middleware); ok {
+				routes = append(routes, GlobalMiddleware(mw, newRoutes)...)
+				idxReqLine = idxMW + 1
+				continue
+			}
+		}
+
+		idxReqLine = idxHandler + 1
+		routes = append(routes, newRoutes...)
+	}
+
+	return routes
+}
 
 // OptTrailingSlash ensures that the provided routes will perform the same regardless of whether or not they have a
 // trailing slash.
