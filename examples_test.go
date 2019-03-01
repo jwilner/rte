@@ -187,3 +187,37 @@ func ExampleDefaultMethod() {
 	// GET /foo succeeded
 	// PRETEND /foo not allowed
 }
+
+func ExampleGlobalMiddleware() {
+	// applied to the one
+	m1 := stringMW("and this is m1")
+	// applied to both
+	m2 := stringMW("this is m2")
+
+	tbl := rte.Must(rte.GlobalMiddleware(m2, rte.Routes(
+		"GET /", func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprintf(w, "handling GET /\n")
+		}, m1,
+		"POST /", func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprintf(w, "handling POST /\n")
+		},
+	)))
+
+	{
+		w := httptest.NewRecorder()
+		tbl.ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
+		fmt.Print(w.Body.String())
+	}
+
+	{
+		w := httptest.NewRecorder()
+		tbl.ServeHTTP(w, httptest.NewRequest("POST", "/", nil))
+		fmt.Print(w.Body.String())
+	}
+
+	// Output: this is m2
+	// and this is m1
+	// handling GET /
+	// this is m2
+	// handling POST /
+}
