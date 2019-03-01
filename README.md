@@ -22,7 +22,7 @@ import (
 )
 
 func main() {
-	tbl := rte.Must(rte.Routes(
+    tbl := rte.Must(rte.Routes(
         "/my-resource", rte.Routes(
             "POST", func(w http.ResponseWriter, r *http.Request) {
                 // create
