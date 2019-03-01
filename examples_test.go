@@ -79,6 +79,58 @@ func ExampleRoutes() {
 	// ~ /my-resource/:id
 }
 
+func ExampleRoutes_All() {
+	mw := stringMW("abc")
+	rts := rte.Routes(
+		nil,
+
+		"GET", func(w http.ResponseWriter, r *http.Request) {},
+		"GET /", func(w http.ResponseWriter, r *http.Request) {},
+		"/", func(w http.ResponseWriter, r *http.Request) {},
+		"", func(w http.ResponseWriter, r *http.Request) {},
+
+		"GET", func(w http.ResponseWriter, r *http.Request) {}, mw,
+		"GET /", func(w http.ResponseWriter, r *http.Request) {}, mw,
+		"/", func(w http.ResponseWriter, r *http.Request) {}, mw,
+		"", func(w http.ResponseWriter, r *http.Request) {}, mw,
+
+		rte.Route{Method: "OPTIONS", Path: "/bob"},
+		[]rte.Route{
+			{Method: "OPTIONS", Path: "/bob"},
+			{Method: "BLAH", Path: "/jane"},
+		},
+
+		"/pre", []rte.Route{
+			{Method: "GET", Path: "/bob"},
+			{Method: "POST", Path: "/bob/hi"},
+		},
+		"/pre2", []rte.Route{
+			{Method: "GET", Path: "/bob"},
+			{Method: "POST", Path: "/bob/hi"},
+		}, mw,
+	)
+
+	for _, r := range rts {
+		fmt.Println(r)
+	}
+
+	// Output: GET <nil>
+	// GET /
+	// <nil> /
+	// <nil> <nil>
+	// GET <nil>
+	// GET /
+	// <nil> /
+	// <nil> <nil>
+	// OPTIONS /bob
+	// OPTIONS /bob
+	// BLAH /jane
+	// GET /pre/bob
+	// POST /pre/bob/hi
+	// GET /pre2/bob
+	// POST /pre2/bob/hi
+}
+
 func ExampleOptTrailingSlash() {
 	routes := rte.OptTrailingSlash(rte.Routes(
 		"GET /", func(w http.ResponseWriter, r *http.Request) {
