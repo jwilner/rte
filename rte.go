@@ -12,15 +12,15 @@ import (
 )
 
 const (
-	// MethodAll can be provided used as a method within a route to handle scenarios when the path but not
+	// MethodAny can be provided used as a method within a route to handle scenarios when the path but not
 	// the method are matched.
 	//
 	// E.g., serve gets on '/foo/:foo_id' and return a 405 for everything else (405 handler can also access path vars):
 	// 		_ = rte.Must(rte.Routes(
 	// 			"GET /foo/:foo_id", handlerGet,
-	// 			rte.MethodAll + " /foo/:foo_id", handler405,
+	// 			rte.MethodAny + " /foo/:foo_id", handler405,
 	// 		))
-	MethodAll = "~"
+	MethodAny = "~"
 )
 
 // Middleware is shorthand for a function which can handle or modify a request, optionally invoke the next
@@ -178,11 +178,8 @@ func New(routes []Route) (*Table, error) {
 		h, numHandlerParams, err := funcs.Convert(r.Handler)
 		if err != nil {
 			return nil, Error{Type: ErrTypeConversionFailure, Idx: i, Route: r, cause: err}
-		} else if numPathParams != numHandlerParams {
-			// we permit MethodAll handlers to drop params for the common 405 use case
-			if r.Method != MethodAll || numHandlerParams > numPathParams {
-				return nil, Error{Type: ErrTypeParamCountMismatch, Idx: i, Route: r}
-			}
+		} else if numHandlerParams != 0 && numPathParams != numHandlerParams {
+			return nil, Error{Type: ErrTypeParamCountMismatch, Idx: i, Route: r}
 		}
 
 		if r.Middleware != nil {
@@ -196,43 +193,44 @@ func New(routes []Route) (*Table, error) {
 }
 
 func traverse(node *node, path string) map[string]funcs.Handler {
-	i := 0
+	pathIdx := 0
 
-	child := node.get(path[i])
+	child := node.get(path[pathIdx])
 	for child != nil {
 
 		// find point where label and path diverge (or one ends)
-		j := 0
-		for i < len(path) && j < len(child.label) && path[i] == child.label[j] {
-			i++
-			j++
+		labelIdx := 0
+		for pathIdx < len(path) && labelIdx < len(child.label) && path[pathIdx] == child.label[labelIdx] {
+			pathIdx++
+			labelIdx++
 		}
 
-		if j == len(child.label) {
+		// label has finished
+		if labelIdx == len(child.label) {
 			node = child
-			if i == len(path) {
+			if pathIdx == len(path) { // label and path are coincident -- probably multiple methods
 				break
 			}
-			child = node.get(path[i])
+			child = node.get(path[pathIdx])
 			continue
 		}
 
-		// we've stopped in the middle of the current label, so the child
-		// will be pushed down in the tree -- update its label
-		label := child.label
-		child.label = label[j:]
+		// if pathIdx is the end of the path, this is a prefix -- split the label and insert
+		if pathIdx == len(path) {
+			newChild := newNode(child.label[:labelIdx])
+			child.label = child.label[labelIdx:]
 
-		if i == len(path) { // this is a prefix -- split the path and insert
-			newChild := newNode(label[:j])
 			newChild.add(child)
 			node.add(newChild)
+
 			return newChild.hndlrs
 		}
 
-		// they've diverged at j in the current label
-		newN := newNode(path[i:])
+		// path is different from label in middle of label -- split
+		newN := newNode(path[pathIdx:])
+		branch := newNode(child.label[:labelIdx])
+		child.label = child.label[labelIdx:]
 
-		branch := newNode(label[:j])
 		branch.add(child)
 		branch.add(newN)
 		node.add(branch)
@@ -240,13 +238,12 @@ func traverse(node *node, path string) map[string]funcs.Handler {
 		return newN.hndlrs
 	}
 
-	// node.edges[r.path[i]] == "" -- i.e., we hit a terminal node
-	if i == len(path) {
+	if pathIdx == len(path) {
 		return node.hndlrs
 	}
 
-	// we've still got labels to consume -- add a child
-	ch := newNode(path[i:])
+	// we've still got path to consume -- add a new child
+	ch := newNode(path[pathIdx:])
 	node.add(ch)
 	return ch.hndlrs
 }
@@ -302,61 +299,69 @@ type Table struct {
 }
 
 func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	node := t.root
-	pathIdx := 0
-	var (
-		variables funcs.PathVars
-		varIdx    = 0
-		hndlrs    map[string]funcs.Handler
-	)
+	var variables funcs.PathVars
+	_, handlers := t.matchPath(r.RequestURI, variables[:])
+	switch {
+	case handlers[r.Method] != nil:
+		handlers[r.Method](w, r, variables)
+	case handlers[MethodAny] != nil:
+		handlers[MethodAny](w, r, variables)
+	default:
+		t.Default.ServeHTTP(w, r)
+	}
+}
 
-outer:
+// Vars reparses the request URI and returns any matched variables and whether or not there was a route matched.
+func (t *Table) Vars(r *http.Request) ([]string, bool) {
+	var variables funcs.PathVars
+	i, h  := t.matchPath(r.RequestURI, variables[:])
+	return variables[:i], h != nil
+}
+
+func (t *Table) matchPath(path string, vars []string) (int, map[string]funcs.Handler) {
+	var (
+		node            = t.root
+		pathIdx, varIdx int
+	)
 	for {
-		child := node.get(r.RequestURI[pathIdx])
+		child := node.get(path[pathIdx])
 		if child == nil {
-			break outer
+			return varIdx, nil
 		}
 
 		lblIdx := 0
 		for {
 			switch {
-			case r.RequestURI[pathIdx] == child.label[lblIdx]:
+			case path[pathIdx] == child.label[lblIdx]:
 				pathIdx++
 				lblIdx++
 			case child.label[lblIdx] == '*':
 				wcStart := pathIdx
-				for pathIdx < len(r.RequestURI) && r.RequestURI[pathIdx] != '/' {
+				for pathIdx < len(path) && path[pathIdx] != '/' {
 					pathIdx++
 				}
-				variables[varIdx] = r.RequestURI[wcStart:pathIdx]
+				vars[varIdx] = path[wcStart:pathIdx]
 				varIdx++
 				lblIdx++
 			default:
-				break outer
+				return varIdx, nil
 			}
 
-			pathDone, labelDone := pathIdx == len(r.RequestURI), lblIdx == len(child.label)
-			switch {
-			case !pathDone && !labelDone:
-				continue
-			case pathDone && labelDone:
-				hndlrs = child.hndlrs
-				break outer
-			case pathDone:
-				break outer
-			case labelDone:
+			if pathIdx != len(path) {
+				if lblIdx != len(child.label) {
+					continue
+				}
 				node = child
-				continue outer
+				break
 			}
-		}
-	}
 
-	switch {
-	case hndlrs[r.Method] != nil:
-		hndlrs[r.Method](w, r, variables)
-	case hndlrs[MethodAll] != nil:
-		hndlrs[MethodAll](w, r, variables)
-	default:
-		t.Default.ServeHTTP(w, r)
+			// path done
+			if lblIdx != len(child.label) {
+				return varIdx, nil
+			}
+
+			// both done
+			return varIdx, child.hndlrs
+		}
 	}
 }

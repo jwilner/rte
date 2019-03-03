@@ -61,7 +61,7 @@ func ExampleRoutes() {
 				"DELETE", func(w http.ResponseWriter, r *http.Request, id string) {
 					// delete
 				},
-				rte.MethodAll, func(w http.ResponseWriter, r *http.Request, id string) {
+				rte.MethodAny, func(w http.ResponseWriter, r *http.Request, id string) {
 					// serve a 405
 				},
 			),
@@ -157,7 +157,7 @@ func ExampleMust() {
 	}()
 
 	_ = rte.Must(rte.Routes(
-		"GET /hello/:name", func(w http.ResponseWriter, r *http.Request) {
+		"GET /hello/:name", func(w http.ResponseWriter, r *http.Request, a, b string) {
 		},
 	))
 
@@ -166,7 +166,7 @@ func ExampleMust() {
 
 func ExampleNew() {
 	_, err := rte.New(rte.Routes(
-		"GET /hello/:name", func(w http.ResponseWriter, r *http.Request) {
+		"GET /hello/:name", func(w http.ResponseWriter, r *http.Request, a, b string) {
 		},
 	))
 
@@ -179,13 +179,30 @@ func ExampleError() {
 	_, err := rte.New(rte.Routes(
 		"GET /hello", func(w http.ResponseWriter, r *http.Request) {
 		},
-		"GET /hello/:name", func(w http.ResponseWriter, r *http.Request) {
+		"GET /hello/:name", func(w http.ResponseWriter, r *http.Request, a, b string) {
 		},
 	))
 
 	_, _ = fmt.Printf("%v", err.(rte.Error).Route)
 
 	// Output: GET /hello/:name
+}
+
+func ExampleTable_Vars() {
+	var tbl *rte.Table
+	tbl = rte.Must(rte.Routes(
+		"GET /:a/:b", func(w http.ResponseWriter, r *http.Request) { // zero params can match any path
+			vars, _ := tbl.Vars(r)
+			for _, v := range vars {
+				_, _ = fmt.Println(v)
+			}
+		},
+	))
+
+	tbl.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/abc/def", nil))
+
+	// Output: abc
+	// def
 }
 
 func ExamplePrefix() {
@@ -272,4 +289,33 @@ func ExampleGlobalMiddleware() {
 	// handling GET /
 	// this is m2
 	// handling POST /
+}
+
+func ExampleRoutes_third() {
+	rts := rte.Routes(
+		"GET /boo", func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprintln(w, "boo")
+		},
+	)
+
+	var withSlashRedirects []rte.Route
+	for _, route := range rts {
+		target := route.Path
+
+		c := route
+		c.Path += "/"
+		c.Handler = func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, target, http.StatusMovedPermanently)
+		}
+
+		withSlashRedirects = append(withSlashRedirects, route, c)
+	}
+
+	tbl := rte.Must(withSlashRedirects)
+
+	w := httptest.NewRecorder()
+	tbl.ServeHTTP(w, httptest.NewRequest("GET", "/boo/", nil))
+	fmt.Printf("%v %v", w.Code, w.Header().Get("Location"))
+
+	// Output: 301 /boo
 }

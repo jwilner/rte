@@ -180,7 +180,7 @@ func Prefix(prefix string, routes []Route) []Route {
 func DefaultMethod(hndlr interface{}, routes []Route) []Route {
 	defaultSeen := make(map[string]bool)
 	for _, r := range routes {
-		if r.Method == MethodAll {
+		if r.Method == MethodAny {
 			defaultSeen[r.Path] = true
 		}
 	}
@@ -189,7 +189,7 @@ func DefaultMethod(hndlr interface{}, routes []Route) []Route {
 	for _, r := range routes {
 		if !defaultSeen[r.Path] {
 			copied = append(copied, r, Route{
-				Method:  MethodAll,
+				Method:  MethodAny,
 				Path:    r.Path,
 				Handler: hndlr,
 			})

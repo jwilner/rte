@@ -7,6 +7,7 @@ import (
 	"github.com/jwilner/rte/internal/funcs"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -101,7 +102,7 @@ func TestNew(t *testing.T) {
 		{
 			Name: "mismatched param counts",
 			Routes: rte.Routes(
-				"GET /:whoo", func(w http.ResponseWriter, r *http.Request) {},
+				"GET /:whoo", func(w http.ResponseWriter, r *http.Request, _, _ string) {},
 			),
 			WantErr: true,
 			ErrType: rte.ErrTypeParamCountMismatch,
@@ -115,8 +116,8 @@ func TestNew(t *testing.T) {
 					"GET", func(w http.ResponseWriter, r *http.Request, whoo string) {
 
 					},
-					rte.MethodAll, func(w http.ResponseWriter, r *http.Request) {
-						// the number of handler parameters is fewer than path parameters -- special case for MethodAll
+					rte.MethodAny, func(w http.ResponseWriter, r *http.Request) {
+						// the number of handler parameters is fewer than path parameters -- special case for MethodAny
 					},
 				)),
 			),
@@ -128,7 +129,7 @@ func TestNew(t *testing.T) {
 					"GET", func(w http.ResponseWriter, r *http.Request, whoo string) {
 
 					},
-					rte.MethodAll, func(w http.ResponseWriter, r *http.Request, whoo, whee string) {
+					rte.MethodAny, func(w http.ResponseWriter, r *http.Request, whoo, whee string) {
 					},
 				)),
 			),
@@ -307,7 +308,7 @@ func Test_matchPath(t *testing.T) {
 			"match-method-not-allowed",
 			httptest.NewRequest("GET", "/abc/123", nil),
 			rte.Routes(
-				rte.MethodAll+" /:foo/:bar",
+				rte.MethodAny+" /:foo/:bar",
 				func(w http.ResponseWriter, r *http.Request, foo, bar string) {
 					w.WriteHeader(http.StatusMethodNotAllowed)
 					_ = json.NewEncoder(w).Encode([]string{foo, bar})
@@ -319,7 +320,7 @@ func Test_matchPath(t *testing.T) {
 			"",
 			httptest.NewRequest("GET", "/abc/123", nil),
 			rte.Routes(
-				rte.MethodAll+" /:foo/:bar",
+				rte.MethodAny+" /:foo/:bar",
 				func(w http.ResponseWriter, r *http.Request, foo, bar string) {
 					w.WriteHeader(http.StatusMethodNotAllowed)
 					_ = json.NewEncoder(w).Encode([]string{foo, bar})
@@ -424,6 +425,73 @@ func TestMiddleware(t *testing.T) {
 
 			if w.Body.String() != c.WantBody {
 				t.Fatalf("Got %v, want %v", w.Body, c.WantBody)
+			}
+		})
+	}
+}
+
+func TestParseVars(t *testing.T) {
+	cases := []struct {
+		Name       string
+		Request    *http.Request
+		Routes     []rte.Route
+		Expected   []string
+		ExpectedOK bool
+	}{
+		{
+			"empty",
+			httptest.NewRequest("GET", "/blah", nil),
+			rte.Routes("GET /blah", func(http.ResponseWriter, *http.Request) {}),
+			[]string{},
+			true,
+		},
+		{
+			"single",
+			httptest.NewRequest("GET", "/blah", nil),
+			rte.Routes("GET /:abc", func(http.ResponseWriter, *http.Request) {}),
+			[]string{"blah"},
+			true,
+		},
+		{
+			"multi",
+			httptest.NewRequest("GET", "/blah/abc/bar", nil),
+			rte.Routes("GET /:abc/abc/:def", func(http.ResponseWriter, *http.Request) {}),
+			[]string{"blah", "bar"},
+			true,
+		},
+		{
+			"after-start",
+			httptest.NewRequest("GET", "/abc/bar", nil),
+			rte.Routes("GET /abc/:def", func(http.ResponseWriter, *http.Request) {}),
+			[]string{"bar"},
+			true,
+		},
+		{
+			"no-match",
+			httptest.NewRequest("GET", "/abcd/bar", nil),
+			rte.Routes("GET /abc/:def", func(http.ResponseWriter, *http.Request) {}),
+			[]string{},
+			false,
+		},
+		{
+			"partial",
+			httptest.NewRequest("GET", "/abc/", nil),
+			rte.Routes("GET /:def/123/", func(http.ResponseWriter, *http.Request) {}),
+			[]string{"abc"},
+			false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.Name, func(t *testing.T) {
+			tbl := rte.Must(c.Routes)
+			res, ok := tbl.Vars(c.Request)
+
+			if !reflect.DeepEqual(c.Expected, res) {
+				t.Fatalf("Expected %#v but got %#v", c.Expected, res)
+			}
+			if ok != c.ExpectedOK {
+				t.Fatalf("Expected ok %v", c.ExpectedOK)
 			}
 		})
 	}
