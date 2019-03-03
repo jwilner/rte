@@ -7,23 +7,20 @@ import (
 	"fmt"
 	"github.com/jwilner/rte/internal/funcs"
 	"net/http"
+	"regexp"
 	"strings"
 )
 
 const (
-	// MethodAll can be provided used as a method within a route to handle scenarios when the path but not
+	// MethodAny can be provided used as a method within a route to handle scenarios when the path but not
 	// the method are matched.
 	//
 	// E.g., serve gets on '/foo/:foo_id' and return a 405 for everything else (405 handler can also access path vars):
 	// 		_ = rte.Must(rte.Routes(
 	// 			"GET /foo/:foo_id", handlerGet,
-	// 			rte.MethodAll + " /foo/:foo_id", handler405,
+	// 			rte.MethodAny + " /foo/:foo_id", handler405,
 	// 		))
-	MethodAll = "~"
-)
-
-const (
-	wildcard, wildcardSlash = "*", "*/"
+	MethodAny = "~"
 )
 
 // Middleware is shorthand for a function which can handle or modify a request, optionally invoke the next
@@ -135,8 +132,8 @@ func Must(routes []Route) *Table {
 
 // New builds routes into a Table or returns an error
 func New(routes []Route) (*Table, error) {
-	t := new(Table)
-	t.root = newNode()
+	t := &Table{root: newNode(""), Default: http.NotFoundHandler()}
+	normalizer := regexp.MustCompile(`:[^/]*`)
 
 	maxVars := len(funcs.PathVars{})
 	for i, r := range routes {
@@ -156,55 +153,135 @@ func New(routes []Route) (*Table, error) {
 			return nil, Error{Type: ErrTypeNoInitialSlash, Idx: i, Route: r}
 		}
 
-		n := t.root
-		numPathParams := 0
-		for _, seg := range strings.SplitAfter(r.Path, "/")[1:] {
-			// normalize
-			seg, err := normalize(seg)
-			if err != nil {
-				return nil, Error{Type: ErrTypeInvalidSegment, Idx: i, Route: r, cause: err}
-			} else if seg == wildcard || seg == wildcardSlash {
+		if strings.Contains(r.Path, "*") {
+			return nil, Error{Type: ErrTypeInvalidSegment, Idx: i, Route: r}
+		}
+
+		normalized := normalizer.ReplaceAllString(r.Path, "*")
+
+		var numPathParams int
+		for _, c := range normalized {
+			if c == '*' {
 				numPathParams++
 			}
-
-			if n.children[seg] == nil {
-				n.children[seg] = newNode()
-			}
-
-			n = n.children[seg]
 		}
+
 		if numPathParams > maxVars {
 			return nil, Error{Type: ErrTypeOutOfRange, Idx: i, Route: r}
 		}
 
-		if _, has := n.methods[r.Method]; has {
+		hndlrs := traverse(t.root, normalized)
+		if _, exists := hndlrs[r.Method]; exists {
 			return nil, Error{Type: ErrTypeDuplicateHandler, Idx: i, Route: r}
 		}
 
 		h, numHandlerParams, err := funcs.Convert(r.Handler)
 		if err != nil {
 			return nil, Error{Type: ErrTypeConversionFailure, Idx: i, Route: r, cause: err}
-		} else if numPathParams != numHandlerParams {
-			// we permit MethodAll handlers to drop params for the common 405 use case
-			if r.Method != MethodAll || numHandlerParams > numPathParams {
-				return nil, Error{Type: ErrTypeParamCountMismatch, Idx: i, Route: r}
-			}
+		} else if numHandlerParams != 0 && numPathParams != numHandlerParams {
+			return nil, Error{Type: ErrTypeParamCountMismatch, Idx: i, Route: r}
 		}
 
 		if r.Middleware != nil {
 			h = applyMiddleware(h, r.Middleware)
 		}
 
-		n.methods[r.Method] = h
+		hndlrs[r.Method] = h
 	}
-
-	t.Default = http.NotFoundHandler()
 
 	return t, nil
 }
 
-func newNode() *node {
-	return &node{children: make(map[string]*node), methods: make(map[string]funcs.Handler)}
+func traverse(node *node, path string) map[string]funcs.Handler {
+	pathIdx := 0
+
+	child := node.get(path[pathIdx])
+	for child != nil {
+
+		// find point where label and path diverge (or one ends)
+		labelIdx := 0
+		for pathIdx < len(path) && labelIdx < len(child.label) && path[pathIdx] == child.label[labelIdx] {
+			pathIdx++
+			labelIdx++
+		}
+
+		// label has finished
+		if labelIdx == len(child.label) {
+			node = child
+			if pathIdx == len(path) { // label and path are coincident -- probably multiple methods
+				break
+			}
+			child = node.get(path[pathIdx])
+			continue
+		}
+
+		// if pathIdx is the end of the path, this is a prefix -- split the label and insert
+		if pathIdx == len(path) {
+			newChild := newNode(child.label[:labelIdx])
+			child.label = child.label[labelIdx:]
+
+			newChild.add(child)
+			node.add(newChild)
+
+			return newChild.hndlrs
+		}
+
+		// path is different from label in middle of label -- split
+		newN := newNode(path[pathIdx:])
+		branch := newNode(child.label[:labelIdx])
+		child.label = child.label[labelIdx:]
+
+		branch.add(child)
+		branch.add(newN)
+		node.add(branch)
+
+		return newN.hndlrs
+	}
+
+	if pathIdx == len(path) {
+		return node.hndlrs
+	}
+
+	// we've still got path to consume -- add a new child
+	ch := newNode(path[pathIdx:])
+	node.add(ch)
+	return ch.hndlrs
+}
+
+type node struct {
+	// index[i] == children[i].label[0] always
+	index    []byte
+	children []*node
+	label    string
+	hndlrs   map[string]funcs.Handler
+}
+
+func newNode(label string) *node {
+	return &node{
+		hndlrs: make(map[string]funcs.Handler),
+		label:  label,
+	}
+}
+
+func (n *node) add(n2 *node) {
+	for i, c := range n.index {
+		if c == n2.label[0] {
+			n.children[i] = n2
+			return
+		}
+	}
+
+	n.index = append(n.index, n2.label[0])
+	n.children = append(n.children, n2)
+}
+
+func (n *node) get(b byte) *node {
+	for i, ib := range n.index {
+		if ib == b {
+			return n.children[i]
+		}
+	}
+	return nil
 }
 
 func applyMiddleware(h funcs.Handler, mw Middleware) funcs.Handler {
@@ -215,21 +292,6 @@ func applyMiddleware(h funcs.Handler, mw Middleware) funcs.Handler {
 	}
 }
 
-func normalize(seg string) (string, error) {
-	switch {
-	case strings.ContainsAny(seg, "*"):
-		return "", fmt.Errorf("segment %q contains invalid characters", seg)
-	case seg == "", seg[0] != ':':
-		return seg, nil
-	case seg == ":", seg == ":/":
-		return "", fmt.Errorf("wildcard segment %q must have a name", seg)
-	case seg[len(seg)-1] == '/':
-		return wildcardSlash, nil
-	default:
-		return wildcard, nil
-	}
-}
-
 // Table manages the routing table and a default handler
 type Table struct {
 	Default http.Handler
@@ -237,60 +299,69 @@ type Table struct {
 }
 
 func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var variables funcs.PathVars
+	_, handlers := t.matchPath(r.RequestURI, variables[:])
+	switch {
+	case handlers[r.Method] != nil:
+		handlers[r.Method](w, r, variables)
+	case handlers[MethodAny] != nil:
+		handlers[MethodAny](w, r, variables)
+	default:
+		t.Default.ServeHTTP(w, r)
+	}
+}
+
+// Vars reparses the request URI and returns any matched variables and whether or not there was a route matched.
+func (t *Table) Vars(r *http.Request) ([]string, bool) {
+	var variables funcs.PathVars
+	i, h  := t.matchPath(r.RequestURI, variables[:])
+	return variables[:i], h != nil
+}
+
+func (t *Table) matchPath(path string, vars []string) (int, map[string]funcs.Handler) {
 	var (
-		i      int
-		params funcs.PathVars
-		node   = t.root
+		node            = t.root
+		pathIdx, varIdx int
 	)
-	// Analogous to `SplitAfter`, but avoids an alloc for fun
-	// "" -> [], "/" -> [""], "/abc" -> ["/", "abc"], "/abc/" -> ["/", "abc/", ""]
-	if start := strings.IndexByte(r.URL.Path, '/') + 1; start != 0 {
-		for hitEnd := false; !hitEnd; {
-			var end int
-			if offset := strings.IndexByte(r.URL.Path[start:], '/'); offset != -1 {
-				end = start + offset + 1
-			} else {
-				end = len(r.URL.Path)
-				hitEnd = true
-			}
-
-			var pVarName string
-			if pVarName, node = node.match(r.URL.Path[start:end]); node == nil {
-				t.Default.ServeHTTP(w, r)
-				return
-			} else if pVarName != "" { // we've matched a path var
-				params[i] = pVarName
-				i++
-			}
-
-			start = end
+	for {
+		child := node.get(path[pathIdx])
+		if child == nil {
+			return varIdx, nil
 		}
-	}
 
-	if h, ok := node.methods[r.Method]; ok {
-		h(w, r, params)
-		return
-	}
+		lblIdx := 0
+		for {
+			switch {
+			case path[pathIdx] == child.label[lblIdx]:
+				pathIdx++
+				lblIdx++
+			case child.label[lblIdx] == '*':
+				wcStart := pathIdx
+				for pathIdx < len(path) && path[pathIdx] != '/' {
+					pathIdx++
+				}
+				vars[varIdx] = path[wcStart:pathIdx]
+				varIdx++
+				lblIdx++
+			default:
+				return varIdx, nil
+			}
 
-	if h, ok := node.methods[MethodAll]; ok {
-		h(w, r, params)
-		return
-	}
+			if pathIdx != len(path) {
+				if lblIdx != len(child.label) {
+					continue
+				}
+				node = child
+				break
+			}
 
-	t.Default.ServeHTTP(w, r)
-}
+			// path done
+			if lblIdx != len(child.label) {
+				return varIdx, nil
+			}
 
-type node struct {
-	children map[string]*node
-	methods  map[string]funcs.Handler
-}
-
-func (n *node) match(seg string) (string, *node) {
-	if c := n.children[seg]; c != nil {
-		return "", c
-	} else if l := len(seg) - 1; l >= 0 && seg[l] == '/' {
-		return seg[:l], n.children[wildcardSlash]
-	} else {
-		return seg, n.children[wildcard]
+			// both done
+			return varIdx, child.hndlrs
+		}
 	}
 }
