@@ -171,7 +171,7 @@ func New(routes []Route) (*Table, error) {
 		}
 
 		hndlrs := traverse(t.root, normalized)
-		if _, exists := hndlrs[r.Method]; exists {
+		if hndlrs.Get(r.Method) != nil {
 			return nil, Error{Type: ErrTypeDuplicateHandler, Idx: i, Route: r}
 		}
 
@@ -186,13 +186,13 @@ func New(routes []Route) (*Table, error) {
 			h = applyMiddleware(h, r.Middleware)
 		}
 
-		hndlrs[r.Method] = h
+		hndlrs.Put(r.Method, h)
 	}
 
 	return t, nil
 }
 
-func traverse(node *node, path string) map[string]funcs.Handler {
+func traverse(node *node, path string) *handlers {
 	pathIdx := 0
 
 	child := node.get(path[pathIdx])
@@ -217,68 +217,73 @@ func traverse(node *node, path string) map[string]funcs.Handler {
 
 		// if pathIdx is the end of the path, this is a prefix -- split the label and insert
 		if pathIdx == len(path) {
+			// note that the order in which nodes are added is significant here, because we're about to
+			// mutate labels and that's what things are internally keyed by -- always add parents first.
 			newChild := newNode(child.label[:labelIdx])
-			child.label = child.label[labelIdx:]
-
-			newChild.add(child)
 			node.add(newChild)
 
-			return newChild.hndlrs
+			child.label = child.label[labelIdx:]
+			newChild.add(child)
+
+			return &newChild.hndlrs
 		}
 
 		// path is different from label in middle of label -- split
-		newN := newNode(path[pathIdx:])
+		// note that the order in which nodes are added is significant here, because we're about to
+		// mutate labels and that's what things are internally keyed by -- always add parents first.
 		branch := newNode(child.label[:labelIdx])
-		child.label = child.label[labelIdx:]
-
-		branch.add(child)
-		branch.add(newN)
 		node.add(branch)
 
-		return newN.hndlrs
+		newN := newNode(path[pathIdx:])
+		branch.add(newN)
+
+		child.label = child.label[labelIdx:]
+		branch.add(child)
+
+		return &newN.hndlrs
 	}
 
 	if pathIdx == len(path) {
-		return node.hndlrs
+		return &node.hndlrs
 	}
 
 	// we've still got path to consume -- add a new child
 	ch := newNode(path[pathIdx:])
 	node.add(ch)
-	return ch.hndlrs
+	return &ch.hndlrs
 }
 
 type node struct {
-	// index[i] == children[i].label[0] always
-	index    []byte
 	children []*node
 	label    string
-	hndlrs   map[string]funcs.Handler
+	hndlrs   handlers
 }
 
 func newNode(label string) *node {
-	return &node{
-		hndlrs: make(map[string]funcs.Handler),
-		label:  label,
-	}
+	return &node{label: label}
 }
 
 func (n *node) add(n2 *node) {
-	for i, c := range n.index {
-		if c == n2.label[0] {
+	for i, c := range n.children {
+		if c.label[0] == n2.label[0] {
 			n.children[i] = n2
 			return
 		}
 	}
 
-	n.index = append(n.index, n2.label[0])
-	n.children = append(n.children, n2)
+	// micro optimization! always resize to exactly fit one more. arguably not worth it.
+	// trades marginally slower init for marginally smaller memory footprint
+	l := len(n.children)
+	newC := make([]*node, l+1)
+	copy(newC, n.children)
+	newC[l] = n2
+	n.children = newC
 }
 
 func (n *node) get(b byte) *node {
-	for i, ib := range n.index {
-		if ib == b {
-			return n.children[i]
+	for _, c := range n.children {
+		if c.label[0] == b {
+			return c
 		}
 	}
 	return nil
@@ -294,31 +299,60 @@ func applyMiddleware(h funcs.Handler, mw Middleware) funcs.Handler {
 
 // Table manages the routing table and a default handler
 type Table struct {
-	Default http.Handler
-	root    *node
+	Default   http.Handler
+	root      *node
+	maxParams int
 }
 
 func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var variables funcs.PathVars
-	_, handlers := t.matchPath(r.RequestURI, variables[:])
-	switch {
-	case handlers[r.Method] != nil:
-		handlers[r.Method](w, r, variables)
-	case handlers[MethodAny] != nil:
-		handlers[MethodAny](w, r, variables)
-	default:
-		t.Default.ServeHTTP(w, r)
+	if _, handlers := t.matchPath(r.RequestURI, variables[:]); handlers != nil {
+		if h := handlers.Get(r.Method); h != nil {
+			h(w, r, variables)
+			return
+		}
+		if h := handlers.Get(MethodAny); h != nil {
+			h(w, r, variables)
+			return
+		}
 	}
+	t.Default.ServeHTTP(w, r)
+}
+
+type methodHandler struct {
+	Method  string
+	Handler funcs.Handler
+}
+
+type handlers []methodHandler
+
+func (h *handlers) Get(m string) funcs.Handler {
+	for _, v := range *h {
+		if v.Method == m {
+			return v.Handler
+		}
+	}
+	return nil
+}
+
+func (h *handlers) Put(m string, hndlr funcs.Handler) {
+	// micro optimization! always resize to exactly fit one more. arguably not worth it.
+	// trades marginally slower init for marginally smaller memory footprint
+	l := len(*h)
+	newH := make(handlers, l+1)
+	copy(newH, *h)
+	newH[l] = methodHandler{m, hndlr}
+	*h = newH
 }
 
 // Vars reparses the request URI and returns any matched variables and whether or not there was a route matched.
 func (t *Table) Vars(r *http.Request) ([]string, bool) {
 	var variables funcs.PathVars
-	i, h  := t.matchPath(r.RequestURI, variables[:])
+	i, h := t.matchPath(r.RequestURI, variables[:])
 	return variables[:i], h != nil
 }
 
-func (t *Table) matchPath(path string, vars []string) (int, map[string]funcs.Handler) {
+func (t *Table) matchPath(path string, vars []string) (int, *handlers) {
 	var (
 		node            = t.root
 		pathIdx, varIdx int
@@ -326,7 +360,9 @@ func (t *Table) matchPath(path string, vars []string) (int, map[string]funcs.Han
 	for {
 		child := node.get(path[pathIdx])
 		if child == nil {
-			return varIdx, nil
+			if child = node.get('*'); child == nil {
+				return varIdx, nil
+			}
 		}
 
 		lblIdx := 0
@@ -361,7 +397,7 @@ func (t *Table) matchPath(path string, vars []string) (int, map[string]funcs.Han
 			}
 
 			// both done
-			return varIdx, child.hndlrs
+			return varIdx, &child.hndlrs
 		}
 	}
 }
