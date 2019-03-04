@@ -2,7 +2,6 @@
 package funcs
 
 import (
-	"fmt"
 	"net/http"
 )
 
@@ -17,38 +16,38 @@ type PathVars [maxVars]string
 type Handler func(w http.ResponseWriter, r *http.Request, pathVars PathVars)
 
 // Convert converts the provided interface to a Handler if possible.
-func Convert(i interface{}) (Handler, int, error) {
+func Convert(i interface{}) (Handler, int, bool) {
 	switch v := i.(type) {
 	case http.Handler:
-		return func0(v.ServeHTTP), 0, nil
+		return func0(v.ServeHTTP), 0, true
 	case func(w http.ResponseWriter, r *http.Request):
-		return func0(v), 0, nil
+		return func0(v), 0, true
 	case func(w http.ResponseWriter, r *http.Request, p0 string):
-		return func1(v), 1, nil
+		return func1(v), 1, true
 	case func(w http.ResponseWriter, r *http.Request, pVars [1]string):
-		return arrFunc1(v), 1, nil
+		return arrFunc1(v), 1, true
 	case func(w http.ResponseWriter, r *http.Request, p0, p1 string):
-		return func2(v), 2, nil
+		return func2(v), 2, true
 	case func(w http.ResponseWriter, r *http.Request, pVars [2]string):
-		return arrFunc2(v), 2, nil
+		return arrFunc2(v), 2, true
 	case func(w http.ResponseWriter, r *http.Request, p0, p1, p2 string):
-		return func3(v), 3, nil
+		return func3(v), 3, true
 	case func(w http.ResponseWriter, r *http.Request, pVars [3]string):
-		return arrFunc3(v), 3, nil
+		return arrFunc3(v), 3, true
 	case func(w http.ResponseWriter, r *http.Request, p0, p1, p2, p3 string):
-		return func4(v), 4, nil
+		return func4(v), 4, true
 	case func(w http.ResponseWriter, r *http.Request, pVars [4]string):
-		return arrFunc4(v), 4, nil
+		return arrFunc4(v), 4, true
 	case func(w http.ResponseWriter, r *http.Request, pVars [5]string):
-		return arrFunc5(v), 5, nil
+		return arrFunc5(v), 5, true
 	case func(w http.ResponseWriter, r *http.Request, pVars [6]string):
-		return arrFunc6(v), 6, nil
+		return arrFunc6(v), 6, true
 	case func(w http.ResponseWriter, r *http.Request, pVars [7]string):
-		return arrFunc7(v), 7, nil
+		return arrFunc7(v), 7, true
 	case func(w http.ResponseWriter, r *http.Request, pVars [maxVars]string):
-		return arrFunc8(v), 8, nil
+		return arrFunc8(v), 8, true
 	default:
-		return nil, 0, fmt.Errorf("unknown handler type: %T", i)
+		return nil, 0, false
 	}
 }
 

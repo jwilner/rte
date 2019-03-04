@@ -13,7 +13,6 @@ var (
 package funcs
 
 import (
-	"fmt"
 	"net/http"
 )
 
@@ -28,10 +27,10 @@ type PathVars [maxVars]string
 type Handler func(w http.ResponseWriter, r *http.Request, pathVars PathVars)
 
 // Convert converts the provided interface to a Handler if possible.
-func Convert(i interface{}) (Handler, int, error) {
+func Convert(i interface{}) (Handler, int, bool) {
 	switch v := i.(type) {
 	case http.Handler:
-		return {{ .ZeroFuncName }}(v.ServeHTTP), 0, nil
+		return {{ .ZeroFuncName }}(v.ServeHTTP), 0, true
 {{- range $sig := .Signatures }}
 {{- if and (not .Arr) (gt .Count 0) }}
 	case func(w http.ResponseWriter, r *http.Request, {{ range $idx, $p := .PNames }}{{ if $idx }}, {{ end }}{{ $p }}{{ end }} string):
@@ -42,10 +41,10 @@ func Convert(i interface{}) (Handler, int, error) {
 {{- else }}
 	case func(w http.ResponseWriter, r *http.Request, pVars [{{ .Count }}]string):
 {{- end }}
-		return {{ .Name }}(v), {{ .Count }}, nil
+		return {{ .Name }}(v), {{ .Count }}, true
 {{- end }}
 	default:
-		return nil, 0, fmt.Errorf("unknown handler type: %T", i)
+		return nil, 0, false
 	}
 }
 

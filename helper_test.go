@@ -316,7 +316,7 @@ func TestRoutes(t *testing.T) {
 			Args: []interface{}{
 				"GET /", func() {},
 			},
-			PanicVal: "rte.Routes: invalid handler for \"GET /\" in position 1: unknown handler type: func()",
+			PanicVal: "rte.Routes: invalid handler for \"GET /\" in position 1: func()",
 		},
 		{
 			Name: "prefix shorthand",

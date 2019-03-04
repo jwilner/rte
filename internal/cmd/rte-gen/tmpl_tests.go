@@ -31,7 +31,7 @@ func TestFuncs(t *testing.T) {
 			Route:   "/",
 			Path:    "/",
 			Handler: func(){},
-			ErrMsg:  "route 0 \"GET /\": handler has an unsupported signature: unknown handler type: func()",
+			ErrMsg:  "route 0 \"GET /\": handler has an unsupported signature: func()",
 		},
 		{
 			Name:     "func0-handler",

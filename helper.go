@@ -78,13 +78,13 @@ func Routes(is ...interface{}) []Route {
 					r.Method = split[0]
 				}
 			}
-			if _, _, err := funcs.Convert(v); err != nil {
+			if _, _, ok := funcs.Convert(v); !ok {
 				panic(fmt.Sprintf(
-					"rte.Routes: invalid handler for \"%v %v\" in position %v: %v",
+					"rte.Routes: invalid handler for \"%v %v\" in position %v: %T",
 					r.Method,
 					r.Path,
 					idxHandler,
-					err,
+					v,
 				))
 			}
 			r.Handler = v

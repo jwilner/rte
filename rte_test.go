@@ -15,13 +15,12 @@ import (
 
 func TestNew(t *testing.T) {
 	for _, c := range []struct {
-		Name     string
-		Routes   []rte.Route
-		WantErr  bool
-		ErrType  int
-		ErrIdx   int
-		ErrMsg   string
-		CauseMsg string
+		Name    string
+		Routes  []rte.Route
+		WantErr bool
+		ErrType int
+		ErrIdx  int
+		ErrMsg  string
 	}{
 		{
 			Name: "emptyNoErr",
@@ -95,9 +94,8 @@ func TestNew(t *testing.T) {
 			WantErr: true,
 			ErrType: rte.ErrTypeConversionFailure,
 			ErrIdx:  0,
-			ErrMsg: `route 0 "GET /:whoo": handler has an unsupported signature: unknown handler type: ` +
+			ErrMsg: `route 0 "GET /:whoo": handler has an unsupported signature: ` +
 				`func(http.ResponseWriter, *http.Request, int)`,
-			CauseMsg: `unknown handler type: func(http.ResponseWriter, *http.Request, int)`,
 		},
 		{
 			Name: "mismatched param counts",
@@ -126,11 +124,8 @@ func TestNew(t *testing.T) {
 			Name: "method all cannot exceed",
 			Routes: rte.Routes(
 				rte.Prefix("/:whoo", rte.Routes(
-					"GET", func(w http.ResponseWriter, r *http.Request, whoo string) {
-
-					},
-					rte.MethodAny, func(w http.ResponseWriter, r *http.Request, whoo, whee string) {
-					},
+					"GET", func(w http.ResponseWriter, r *http.Request, whoo string) {},
+					rte.MethodAny, func(w http.ResponseWriter, r *http.Request, whoo, whee string) {},
 				)),
 			),
 			WantErr: true,
@@ -152,6 +147,49 @@ func TestNew(t *testing.T) {
 			ErrMsg: `route 0 "GET ` + strings.Repeat("/:whoo", len(funcs.PathVars{})+1) +
 				`": path has more than ` + strconv.Itoa(len(funcs.PathVars{})) + ` parameters`,
 		},
+		{
+			Name: "conflicting routes one way",
+			Routes: rte.Routes(
+				"GET /foo/bar", func(http.ResponseWriter, *http.Request) {},
+				"GET /foo/:foo_id", func(http.ResponseWriter, *http.Request) {},
+			),
+			WantErr: true,
+			ErrIdx:  1,
+			ErrType: rte.ErrTypeConflictingRoutes,
+			ErrMsg:  `route 1 "GET /foo/:foo_id": conflicting routes: "GET /foo/*", "GET /foo/bar"`,
+		},
+		{
+			Name: "conflicting routes one way",
+			Routes: rte.Routes(
+				"GET /foo/:foo_id", func(http.ResponseWriter, *http.Request) {},
+				"GET /foo/bar", func(http.ResponseWriter, *http.Request) {},
+			),
+			WantErr: true,
+			ErrIdx:  1,
+			ErrType: rte.ErrTypeConflictingRoutes,
+			ErrMsg:  `route 1 "GET /foo/bar": conflicting routes: "GET /foo/*", "GET /foo/bar"`,
+		},
+		{
+			Name: "conflicting routes deep nested",
+			Routes: rte.Routes(
+				"GET /foo/:foo_id/far/fee", func(http.ResponseWriter, *http.Request) {},
+				// force partitions later on
+				"GET /foo/:foo_id/far/fed", func(http.ResponseWriter, *http.Request) {},
+				"GET /foo/bar", func(http.ResponseWriter, *http.Request) {},
+			),
+			WantErr: true,
+			ErrIdx:  2,
+			ErrType: rte.ErrTypeConflictingRoutes,
+			ErrMsg: `route 2 "GET /foo/bar": conflicting routes: "GET /foo/*/far/fed", "GET /foo/*/far/fee", ` +
+				`"GET /foo/bar"`,
+		},
+		{
+			Name: "different methods no conflict",
+			Routes: rte.Routes(
+				"PUT /foo/:foo_id", func(http.ResponseWriter, *http.Request) {},
+				"GET /foo/bar", func(http.ResponseWriter, *http.Request) {},
+			),
+		},
 	} {
 		t.Run(c.Name, func(t *testing.T) {
 			defer func() {
@@ -164,27 +202,16 @@ func TestNew(t *testing.T) {
 				t.Fatalf("want err %v, got %v", c.WantErr, err)
 			}
 			if c.WantErr {
-				e, ok := err.(rte.Error)
+				e, ok := err.(*rte.TableError)
 				switch {
 				case !ok:
-					t.Fatalf("expected a rte.Error, got %T: %v", err, err)
+					t.Fatalf("expected a rte.TableError, got %T: %v", err, err)
 				case e.Type != c.ErrType:
 					t.Fatalf("expected error type %v, but got %v", c, e)
 				case e.Idx != c.ErrIdx:
 					t.Fatalf("expected error to occur with route %v, but got route %v", c.ErrIdx, e.Idx)
 				case e.Error() != c.ErrMsg:
 					t.Fatalf("expected error message %v, but got %v", c.ErrMsg, e.Error())
-				}
-
-				if c.CauseMsg != "" {
-					causeMsg := ""
-					if e.Cause() != nil {
-						causeMsg = e.Cause().Error()
-					}
-
-					if c.CauseMsg != causeMsg {
-						t.Fatalf("wanted %q as a cause but got %q", c.CauseMsg, causeMsg)
-					}
 				}
 			}
 		})
@@ -224,7 +251,7 @@ func TestMust(t *testing.T) {
 	}
 }
 
-func Test_matchPath(t *testing.T) {
+func TestMatching(t *testing.T) {
 	h200 := func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(nil)
 	}
@@ -234,106 +261,92 @@ func Test_matchPath(t *testing.T) {
 	}
 
 	tests := []struct {
-		name string
-		req  *http.Request
-		rte  []rte.Route
-		code int
-		body string
+		name, skipReason string
+		req              *http.Request
+		rte              []rte.Route
+		code             int
+		body             string
 	}{
 		{
-			"match",
-			httptest.NewRequest("GET", "/abc", nil),
-			rte.Routes("GET /abc", h200),
-			200, "null",
+			name: "match",
+			req:  httptest.NewRequest("GET", "/abc", nil),
+			rte:  rte.Routes("GET /abc", h200),
+			code: 200, body: "null",
 		},
 		{
-			"wrong-method",
-			httptest.NewRequest("PUT", "/abcd", nil),
-			rte.Routes("POST /abcd", h200),
-			404, "404",
+			name: "wrong-method",
+			req:  httptest.NewRequest("PUT", "/abcd", nil),
+			rte:  rte.Routes("POST /abcd", h200),
+			code: 404, body: "404",
 		},
 		{
-			"match-trailing",
-			httptest.NewRequest("HEAD", "/abc/", nil),
-			rte.Routes("HEAD /abc/", h200),
-			200, "null",
+			name: "match-trailing",
+			req:  httptest.NewRequest("HEAD", "/abc/", nil),
+			rte:  rte.Routes("HEAD /abc/", h200),
+			code: 200, body: "null",
 		},
 		{
-			"require-trailing",
-			httptest.NewRequest("GET", "/abc/", nil),
-			rte.Routes("GET /abc", h200),
-			404, "404",
+			name: "require-trailing",
+			req:  httptest.NewRequest("GET", "/abc/", nil),
+			rte:  rte.Routes("GET /abc", h200),
+			code: 404, body: "404",
 		},
 		{
-			"nested-miss",
-			httptest.NewRequest("GET", "/abc/abcde", nil),
-			rte.Routes("GET /abc/abcdef", h200),
-			404, "404",
+			name: "nested-miss",
+			req:  httptest.NewRequest("GET", "/abc/abcde", nil),
+			rte:  rte.Routes("GET /abc/abcdef", h200),
+			code: 404, body: "404",
 		},
 		{
-			"unequal",
-			httptest.NewRequest("GET", "/abc/abcdeg24", nil),
-			rte.Routes("GET /abc/abcdef", h200),
-			404, "404",
+			name: "unequal",
+			req:  httptest.NewRequest("GET", "/abc/abcdeg24", nil),
+			rte:  rte.Routes("GET /abc/abcdef", h200),
+			code: 404, body: "404",
 		},
 		{
-			"slash-match",
-			httptest.NewRequest("GET", "/", nil),
-			rte.Routes("GET /", h200),
-			200, "null",
+			name: "slash-match",
+			req:  httptest.NewRequest("GET", "/", nil),
+			rte:  rte.Routes("GET /", h200),
+			code: 200, body: "null",
 		},
 		{
-			"wildcard-match",
-			httptest.NewRequest("GET", "/abc", nil),
-			rte.Routes(
+			name: "wildcard-match",
+			req:  httptest.NewRequest("GET", "/abc", nil),
+			rte: rte.Routes(
 				"GET /:whoo",
 				func(w http.ResponseWriter, r *http.Request, whoo string) {
 					_ = json.NewEncoder(w).Encode([]string{whoo})
 				},
 			),
-			200, `["abc"]`,
+			code: 200, body: `["abc"]`,
 		},
 		{
-			"multiple-wildcard",
-			httptest.NewRequest("GET", "/abc/123", nil),
-			rte.Routes(
+			name: "multiple-wildcard",
+			req:  httptest.NewRequest("GET", "/abc/123", nil),
+			rte: rte.Routes(
 				"GET /:foo/:bar",
 				func(w http.ResponseWriter, r *http.Request, foo, bar string) {
 					_ = json.NewEncoder(w).Encode([]string{foo, bar})
 				},
 			),
-			200, `["abc","123"]`,
+			code: 200, body: `["abc","123"]`,
 		},
 		{
-			"match-method-not-allowed",
-			httptest.NewRequest("GET", "/abc/123", nil),
-			rte.Routes(
+			name: "match-method-not-allowed",
+			req:  httptest.NewRequest("GET", "/abc/123", nil),
+			rte: rte.Routes(
 				rte.MethodAny+" /:foo/:bar",
 				func(w http.ResponseWriter, r *http.Request, foo, bar string) {
 					w.WriteHeader(http.StatusMethodNotAllowed)
 					_ = json.NewEncoder(w).Encode([]string{foo, bar})
 				},
 			),
-			405, `["abc","123"]`,
+			code: 405, body: `["abc","123"]`,
 		},
-		{
-			"",
-			httptest.NewRequest("GET", "/abc/123", nil),
-			rte.Routes(
-				rte.MethodAny+" /:foo/:bar",
-				func(w http.ResponseWriter, r *http.Request, foo, bar string) {
-					w.WriteHeader(http.StatusMethodNotAllowed)
-					_ = json.NewEncoder(w).Encode([]string{foo, bar})
-				},
-			),
-			405, `["abc","123"]`,
-		},
-
 		// multi route
 		{
-			"",
-			httptest.NewRequest("GET", "/abc/123", nil),
-			rte.Routes(
+			req: httptest.NewRequest("GET", "/abc/123", nil),
+			rte: rte.Routes(
 				"GET /abc/:bar",
 				func(w http.ResponseWriter, r *http.Request, bar string) {
 					w.WriteHeader(http.StatusAccepted)
@@ -341,12 +354,51 @@ func Test_matchPath(t *testing.T) {
 				},
 				"GET /abc", h200,
 			),
-			http.StatusAccepted, `["123"]`,
+			code: http.StatusAccepted, body: `["123"]`,
+		},
+		{
+			name: "github example",
+			req:  httptest.NewRequest("GET", "/users/blah/received_events", nil),
+			rte: rte.Routes(
+				"GET /authorizations", h200,
+				"GET /authorizations/:id", h200,
+				"POST /authorizations", h200,
+				"PUT /authorizations/clients/:client_id", h200,
+				"PATCH /authorizations/:id", h200,
+				"DELETE /authorizations/:id", h200,
+				"GET /applications/:client_id/tokens/:access_token", h200,
+				"DELETE /applications/:client_id/tokens", h200,
+				"DELETE /applications/:client_id/tokens/:access_token", h200,
+				"GET /events", h200,
+				"GET /repos/:owner/:repo/events", h200,
+				"GET /networks/:owner/:repo/events", h200,
+				"GET /orgs/:org/events", h200,
+				"GET /users/:user/received_events", func(w http.ResponseWriter, r *http.Request, id string) {
+					_, _ = fmt.Fprintln(w, id)
+				},
+				"GET /users/:user/received_events/public", h200,
+				"GET /users/:user/events", h200,
+				"GET /users/:user/events/public", h200,
+				"GET /users/:user/events/orgs/:org", h200,
+			),
+			code: 200, body: "blah",
+		},
+		{
+			name: "method any is refused",
+			req:  httptest.NewRequest(rte.MethodAny, "/", nil),
+			rte: rte.Routes(
+				rte.MethodAny+" /", func(http.ResponseWriter, *http.Request) {},
+			),
+			code: 404, body: "404",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.skipReason != "" {
+				t.Skip(tt.skipReason)
+			}
+
 			tbl := rte.Must(tt.rte)
 			tbl.Default = http.HandlerFunc(h404)
 
