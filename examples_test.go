@@ -175,7 +175,7 @@ func ExampleNew() {
 	// Output: errored! route 0 "GET /hello/:name": path and handler have different numbers of parameters
 }
 
-func ExampleError() {
+func ExampleTableError() {
 	_, err := rte.New(rte.Routes(
 		"GET /hello", func(w http.ResponseWriter, r *http.Request) {
 		},
@@ -183,7 +183,7 @@ func ExampleError() {
 		},
 	))
 
-	_, _ = fmt.Printf("%v", err.(rte.Error).Route)
+	_, _ = fmt.Printf("%v", err.(*rte.TableError).Route)
 
 	// Output: GET /hello/:name
 }

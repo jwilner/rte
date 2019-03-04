@@ -60,7 +60,7 @@ func (r Route) String() string {
 
 const (
 	// ErrTypeMethodEmpty means a route was missing a method
-	ErrTypeMethodEmpty = iota
+	ErrTypeMethodEmpty = iota + 1
 	// ErrTypeNilHandler means a route had a nil handler
 	ErrTypeNilHandler
 	// ErrTypePathEmpty means a path was empty
@@ -77,48 +77,19 @@ const (
 	ErrTypeConversionFailure
 	// ErrTypeParamCountMismatch means the handler doesn't match the number of variables in the path
 	ErrTypeParamCountMismatch
+	// ErrTypeConflictingRoutes is returned when a route would be obscured by a wildcard.
+	ErrTypeConflictingRoutes
 )
 
-// Error encapsulates table construction errors
-type Error struct {
+// TableError encapsulates table construction errors
+type TableError struct {
 	Type, Idx int
 	Route     Route
-	cause     error
+	Msg       string
 }
 
-func (e Error) Error() string {
-	msg := "unknown error"
-	switch e.Type {
-	case ErrTypeMethodEmpty:
-		msg = "method cannot be empty"
-	case ErrTypeNilHandler:
-		msg = "handler cannot be nil"
-	case ErrTypePathEmpty:
-		msg = "path cannot be empty"
-	case ErrTypeNoInitialSlash:
-		msg = "no initial slash"
-	case ErrTypeInvalidSegment:
-		msg = "invalid segment"
-	case ErrTypeOutOfRange:
-		msg = fmt.Sprintf("path has more than %v parameters", len(funcs.PathVars{}))
-	case ErrTypeDuplicateHandler:
-		msg = "duplicate handler"
-	case ErrTypeConversionFailure:
-		msg = "handler has an unsupported signature"
-	case ErrTypeParamCountMismatch:
-		msg = "path and handler have different numbers of parameters"
-	}
-
-	if e.cause != nil {
-		return fmt.Sprintf("route %d %q: %v: %v", e.Idx, e.Route, msg, e.cause)
-	}
-
-	return fmt.Sprintf("route %d %q: %v", e.Idx, e.Route, msg)
-}
-
-// Cause returns the causing error or nil
-func (e Error) Cause() error {
-	return e.cause
+func (e *TableError) Error() string {
+	return fmt.Sprintf("route %d %q: %v", e.Idx, e.Route, e.Msg)
 }
 
 // Must builds routes into a Table and panics if there's an error
@@ -130,72 +101,111 @@ func Must(routes []Route) *Table {
 	return t
 }
 
+var (
+	regexpNormalize  = regexp.MustCompile(`:[^/]*`)
+	regexpInvalidVar = regexp.MustCompile(`[^/]:`)
+)
+
 // New builds routes into a Table or returns an error
 func New(routes []Route) (*Table, error) {
-	t := &Table{root: newNode(""), Default: http.NotFoundHandler()}
-	normalizer := regexp.MustCompile(`:[^/]*`)
+	t := &Table{
+		root:    newNode("", 0),
+		Default: http.NotFoundHandler(),
+	}
 
+	seenMethods := map[string]bool{}
 	maxVars := len(funcs.PathVars{})
 	for i, r := range routes {
 		if r.Method == "" {
-			return nil, Error{Type: ErrTypeMethodEmpty, Idx: i, Route: r}
+			return nil, &TableError{Type: ErrTypeMethodEmpty, Idx: i, Route: r, Msg: "method cannot be empty"}
 		}
 
 		if r.Handler == nil {
-			return nil, Error{Type: ErrTypeNilHandler, Idx: i, Route: r}
+			return nil, &TableError{Type: ErrTypeNilHandler, Idx: i, Route: r, Msg: "handler cannot be nil"}
 		}
 
 		if r.Path == "" {
-			return nil, Error{Type: ErrTypePathEmpty, Idx: i, Route: r}
+			return nil, &TableError{Type: ErrTypePathEmpty, Idx: i, Route: r, Msg: "path cannot be empty"}
 		}
 
 		if r.Path[0] != '/' {
-			return nil, Error{Type: ErrTypeNoInitialSlash, Idx: i, Route: r}
+			return nil, &TableError{Type: ErrTypeNoInitialSlash, Idx: i, Route: r, Msg: "no initial slash"}
 		}
 
-		if strings.Contains(r.Path, "*") {
-			return nil, Error{Type: ErrTypeInvalidSegment, Idx: i, Route: r}
+		if strings.Contains(r.Path, "*") || regexpInvalidVar.MatchString(r.Path) {
+			return nil, &TableError{Type: ErrTypeInvalidSegment, Idx: i, Route: r, Msg: "invalid segment"}
 		}
-
-		normalized := normalizer.ReplaceAllString(r.Path, "*")
 
 		var numPathParams int
-		for _, c := range normalized {
-			if c == '*' {
+		for _, c := range r.Path {
+			if c == ':' {
 				numPathParams++
 			}
 		}
 
 		if numPathParams > maxVars {
-			return nil, Error{Type: ErrTypeOutOfRange, Idx: i, Route: r}
+			return nil, &TableError{
+				Type:  ErrTypeOutOfRange,
+				Idx:   i,
+				Route: r,
+				Msg:   fmt.Sprintf("path has more than %v parameters", maxVars),
+			}
 		}
 
-		hndlrs := traverse(t.root, normalized)
-		if hndlrs.Get(r.Method) != nil {
-			return nil, Error{Type: ErrTypeDuplicateHandler, Idx: i, Route: r}
-		}
-
-		h, numHandlerParams, err := funcs.Convert(r.Handler)
-		if err != nil {
-			return nil, Error{Type: ErrTypeConversionFailure, Idx: i, Route: r, cause: err}
+		h, numHandlerParams, ok := funcs.Convert(r.Handler)
+		if !ok {
+			return nil, &TableError{
+				Type:  ErrTypeConversionFailure,
+				Idx:   i,
+				Route: r,
+				Msg:   fmt.Sprintf("handler has an unsupported signature: %T", r.Handler),
+			}
 		} else if numHandlerParams != 0 && numPathParams != numHandlerParams {
-			return nil, Error{Type: ErrTypeParamCountMismatch, Idx: i, Route: r}
+			return nil, &TableError{
+				Type:  ErrTypeParamCountMismatch,
+				Idx:   i,
+				Route: r,
+				Msg:   "path and handler have different numbers of parameters",
+			}
 		}
 
 		if r.Middleware != nil {
 			h = applyMiddleware(h, r.Middleware)
 		}
 
-		hndlrs.Put(r.Method, h)
+		if !seenMethods[r.Method] {
+			seenMethods[r.Method] = true
+			t.methods = append(t.methods, r.Method)
+			if r.Method == MethodAny {
+				// we'll want to always check for MethodAny, too, in our subtrees
+				t.methodMask = 1 << uint(len(t.methods)-1)
+			}
+		}
+
+		var methodFlag uint
+		for i, m := range t.methods {
+			if m == r.Method {
+				methodFlag = 1 << uint(i)
+			}
+		}
+
+		normalized := regexpNormalize.ReplaceAllString(r.Path, "*")
+		if err := insert(t.root, methodFlag, r.Method, normalized, h); err != nil {
+			err.Route = r
+			err.Idx = i
+			return nil, err
+		}
 	}
 
 	return t, nil
 }
 
-func traverse(node *node, path string) *handlers {
+func insert(node *node, methodFlag uint, method, path string, h funcs.Handler) *TableError {
+	node.methods |= methodFlag // mark this node as containing our current method
+
 	pathIdx := 0
 
-	child := node.get(path[pathIdx])
+	child := node.child(path[pathIdx])
 	for child != nil {
 
 		// find point where label and path diverge (or one ends)
@@ -208,10 +218,12 @@ func traverse(node *node, path string) *handlers {
 		// label has finished
 		if labelIdx == len(child.label) {
 			node = child
+			node.methods |= methodFlag // mark this new node as containing our current method
+
 			if pathIdx == len(path) { // label and path are coincident -- probably multiple methods
 				break
 			}
-			child = node.get(path[pathIdx])
+			child = node.child(path[pathIdx])
 			continue
 		}
 
@@ -219,51 +231,62 @@ func traverse(node *node, path string) *handlers {
 		if pathIdx == len(path) {
 			// note that the order in which nodes are added is significant here, because we're about to
 			// mutate labels and that's what things are internally keyed by -- always add parents first.
-			newChild := newNode(child.label[:labelIdx])
-			node.add(newChild)
+			newChild := newNode(child.label[:labelIdx], methodFlag|child.methods)
+			newChild.setHandler(method, h)
+			node.addChild(newChild)
 
 			child.label = child.label[labelIdx:]
-			newChild.add(child)
-
-			return &newChild.hndlrs
+			newChild.addChild(child)
+			return nil // no conflict possible
 		}
 
 		// path is different from label in middle of label -- split
+
 		// note that the order in which nodes are added is significant here, because we're about to
 		// mutate labels and that's what things are internally keyed by -- always add parents first.
-		branch := newNode(child.label[:labelIdx])
-		node.add(branch)
+		branch := newNode(child.label[:labelIdx], child.methods|methodFlag)
+		node.addChild(branch)
 
-		newN := newNode(path[pathIdx:])
-		branch.add(newN)
+		newN := newNode(path[pathIdx:], methodFlag)
+		newN.setHandler(method, h)
 
 		child.label = child.label[labelIdx:]
-		branch.add(child)
 
-		return &newN.hndlrs
+		branch.addChild(newN) // error is impossible b/c we know branch has no children
+		branch.addChild(child)
+
+		return checkConflict(path[:pathIdx], branch)
 	}
 
 	if pathIdx == len(path) {
-		return &node.hndlrs
+		if node.handler(method) != nil {
+			return &TableError{Type: ErrTypeDuplicateHandler, Msg: "duplicate handler"}
+		}
+		node.setHandler(method, h)
+		return nil
 	}
 
 	// we've still got path to consume -- add a new child
-	ch := newNode(path[pathIdx:])
-	node.add(ch)
-	return &ch.hndlrs
+	ch := newNode(path[pathIdx:], methodFlag)
+	ch.setHandler(method, h)
+	node.addChild(ch)
+
+	return checkConflict(path[:pathIdx], node)
 }
 
 type node struct {
+	// methods is a bit mask represent the different HTTP methods available in this subtree
+	methods  uint
 	children []*node
 	label    string
-	hndlrs   handlers
+	hndlrs   []methodHandler
 }
 
-func newNode(label string) *node {
-	return &node{label: label}
+func newNode(label string, methodFlags uint) *node {
+	return &node{label: label, methods: methodFlags}
 }
 
-func (n *node) add(n2 *node) {
+func (n *node) addChild(n2 *node) {
 	for i, c := range n.children {
 		if c.label[0] == n2.label[0] {
 			n.children[i] = n2
@@ -271,16 +294,16 @@ func (n *node) add(n2 *node) {
 		}
 	}
 
+	l := len(n.children)
 	// micro optimization! always resize to exactly fit one more. arguably not worth it.
 	// trades marginally slower init for marginally smaller memory footprint
-	l := len(n.children)
 	newC := make([]*node, l+1)
 	copy(newC, n.children)
 	newC[l] = n2
 	n.children = newC
 }
 
-func (n *node) get(b byte) *node {
+func (n *node) child(b byte) *node {
 	for _, c := range n.children {
 		if c.label[0] == b {
 			return c
@@ -299,23 +322,31 @@ func applyMiddleware(h funcs.Handler, mw Middleware) funcs.Handler {
 
 // Table manages the routing table and a default handler
 type Table struct {
-	Default   http.Handler
-	root      *node
-	maxParams int
+	Default    http.Handler
+	root       *node
+	maxParams  int
+	methods    []string
+	methodMask uint
 }
 
 func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var variables funcs.PathVars
-	if _, handlers := t.matchPath(r.RequestURI, variables[:]); handlers != nil {
-		if h := handlers.Get(r.Method); h != nil {
-			h(w, r, variables)
-			return
-		}
-		if h := handlers.Get(MethodAny); h != nil {
-			h(w, r, variables)
-			return
-		}
+	methods := t.acceptMethods(r)
+	if methods == 0 {
+		t.Default.ServeHTTP(w, r)
+		return
 	}
+
+	var variables funcs.PathVars
+	if _, node := t.matchPath(methods, r.RequestURI, variables[:]); node != nil {
+		if h := node.handler(r.Method); h != nil {
+			h(w, r, variables)
+			return
+		}
+		// if we've gotten this far, our method mask should guarantee that there's a `MethodAny` handler.
+		node.handler(MethodAny)(w, r, variables)
+		return
+	}
+
 	t.Default.ServeHTTP(w, r)
 }
 
@@ -324,10 +355,8 @@ type methodHandler struct {
 	Handler funcs.Handler
 }
 
-type handlers []methodHandler
-
-func (h *handlers) Get(m string) funcs.Handler {
-	for _, v := range *h {
+func (n *node) handler(m string) funcs.Handler {
+	for _, v := range n.hndlrs {
 		if v.Method == m {
 			return v.Handler
 		}
@@ -335,32 +364,49 @@ func (h *handlers) Get(m string) funcs.Handler {
 	return nil
 }
 
-func (h *handlers) Put(m string, hndlr funcs.Handler) {
+func (n *node) setHandler(m string, hndlr funcs.Handler) {
 	// micro optimization! always resize to exactly fit one more. arguably not worth it.
 	// trades marginally slower init for marginally smaller memory footprint
-	l := len(*h)
-	newH := make(handlers, l+1)
-	copy(newH, *h)
+	l := len(n.hndlrs)
+	newH := make([]methodHandler, l+1)
+	copy(newH, n.hndlrs)
 	newH[l] = methodHandler{m, hndlr}
-	*h = newH
+	n.hndlrs = newH
 }
 
 // Vars reparses the request URI and returns any matched variables and whether or not there was a route matched.
 func (t *Table) Vars(r *http.Request) ([]string, bool) {
 	var variables funcs.PathVars
-	i, h := t.matchPath(r.RequestURI, variables[:])
+	i, h := t.matchPath(t.acceptMethods(r), r.RequestURI, variables[:])
 	return variables[:i], h != nil
 }
 
-func (t *Table) matchPath(path string, vars []string) (int, *handlers) {
+func (t *Table) acceptMethods(r *http.Request) uint {
+	// don't let MethodAny be used as a request method
+	if r.Method == MethodAny {
+		return 0
+	}
+
+	acceptedMethods := t.methodMask
+	for i, m := range t.methods {
+		if m == r.Method {
+			return acceptedMethods | 1<<uint(i)
+		}
+	}
+	return acceptedMethods
+}
+
+func (t *Table) matchPath(methodMask uint, path string, vars []string) (int, *node) {
 	var (
 		node            = t.root
 		pathIdx, varIdx int
 	)
 	for {
-		child := node.get(path[pathIdx])
-		if child == nil {
-			if child = node.get('*'); child == nil {
+		// is there a non-nil sub-tree matching this path explicitly with our methods in it?
+		child := node.child(path[pathIdx])
+		if child == nil || (child.methods&methodMask) == 0 {
+			// is there a non-nil sub-tree matching this path via a wildcard with our methods in it?
+			if child = node.child('*'); child == nil || (child.methods&methodMask) == 0 {
 				return varIdx, nil
 			}
 		}
@@ -397,7 +443,76 @@ func (t *Table) matchPath(path string, vars []string) (int, *handlers) {
 			}
 
 			// both done
-			return varIdx, &child.hndlrs
+			return varIdx, child
 		}
 	}
+}
+
+// checks whether any routes anchored at the current node are obscured by wildcards
+// only matters if methods are the same
+func checkConflict(prefix string, n *node) *TableError {
+	wildChild := n.child('*')
+	if len(n.children) < 2 || wildChild == nil {
+		return nil
+	}
+
+	var overlap *node
+	for _, n := range n.children {
+		if n == wildChild {
+			continue
+		}
+		if wildChild.methods&n.methods > 0 {
+			overlap = n
+			break
+		}
+	}
+
+	if overlap == nil {
+		// both wildcards and static but methods are different
+		return nil
+	}
+
+	// we've got a conflict; now gather info for the error message
+
+	staticPrefix := make(map[string][]string)
+	wildPrefix := make(map[string][]string)
+
+	for _, n := range []struct {
+		Map  map[string][]string
+		Node *node
+	}{
+		{wildPrefix, wildChild},
+		{staticPrefix, overlap},
+	} {
+		for _, v := range extract(n.Node) {
+			method := v[len(v)-1]
+			absPath := strings.Join(append([]string{n.Node.label}, v[:len(v)-1]...), "")
+			n.Map[method] = append(n.Map[method], absPath)
+		}
+	}
+
+	var conflicts []string
+	for method := range staticPrefix {
+		if wildPrefix[method] != nil {
+			for _, s := range append(wildPrefix[method], staticPrefix[method]...) {
+				conflicts = append(conflicts, fmt.Sprintf("\"%v %v%v\"", method, prefix, s))
+			}
+		}
+	}
+
+	return &TableError{Type: ErrTypeConflictingRoutes, Msg: "conflicting routes: " + strings.Join(conflicts, ", ")}
+}
+
+// enumerates routes from current node, with method at end:
+// ["/foo", "bar", "GET"]
+func extract(n *node) (sub [][]string) {
+	for _, c := range n.children {
+		for _, v := range extract(c) {
+			sub = append(sub, append([]string{c.label}, v...))
+		}
+	}
+	for _, h := range n.hndlrs {
+		sub = append(sub, []string{h.Method})
+	}
+	return
 }

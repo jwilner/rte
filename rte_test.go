@@ -15,13 +15,12 @@ import (
 
 func TestNew(t *testing.T) {
 	for _, c := range []struct {
-		Name     string
-		Routes   []rte.Route
-		WantErr  bool
-		ErrType  int
-		ErrIdx   int
-		ErrMsg   string
-		CauseMsg string
+		Name    string
+		Routes  []rte.Route
+		WantErr bool
+		ErrType int
+		ErrIdx  int
+		ErrMsg  string
 	}{
 		{
 			Name: "emptyNoErr",
@@ -95,9 +94,8 @@ func TestNew(t *testing.T) {
 			WantErr: true,
 			ErrType: rte.ErrTypeConversionFailure,
 			ErrIdx:  0,
-			ErrMsg: `route 0 "GET /:whoo": handler has an unsupported signature: unknown handler type: ` +
+			ErrMsg: `route 0 "GET /:whoo": handler has an unsupported signature: ` +
 				`func(http.ResponseWriter, *http.Request, int)`,
-			CauseMsg: `unknown handler type: func(http.ResponseWriter, *http.Request, int)`,
 		},
 		{
 			Name: "mismatched param counts",
@@ -126,11 +124,8 @@ func TestNew(t *testing.T) {
 			Name: "method all cannot exceed",
 			Routes: rte.Routes(
 				rte.Prefix("/:whoo", rte.Routes(
-					"GET", func(w http.ResponseWriter, r *http.Request, whoo string) {
-
-					},
-					rte.MethodAny, func(w http.ResponseWriter, r *http.Request, whoo, whee string) {
-					},
+					"GET", func(w http.ResponseWriter, r *http.Request, whoo string) {},
+					rte.MethodAny, func(w http.ResponseWriter, r *http.Request, whoo, whee string) {},
 				)),
 			),
 			WantErr: true,
@@ -152,6 +147,49 @@ func TestNew(t *testing.T) {
 			ErrMsg: `route 0 "GET ` + strings.Repeat("/:whoo", len(funcs.PathVars{})+1) +
 				`": path has more than ` + strconv.Itoa(len(funcs.PathVars{})) + ` parameters`,
 		},
+		{
+			Name: "conflicting routes one way",
+			Routes: rte.Routes(
+				"GET /foo/bar", func(http.ResponseWriter, *http.Request) {},
+				"GET /foo/:foo_id", func(http.ResponseWriter, *http.Request) {},
+			),
+			WantErr: true,
+			ErrIdx:  1,
+			ErrType: rte.ErrTypeConflictingRoutes,
+			ErrMsg:  `route 1 "GET /foo/:foo_id": conflicting routes: "GET /foo/*", "GET /foo/bar"`,
+		},
+		{
+			Name: "conflicting routes one way",
+			Routes: rte.Routes(
+				"GET /foo/:foo_id", func(http.ResponseWriter, *http.Request) {},
+				"GET /foo/bar", func(http.ResponseWriter, *http.Request) {},
+			),
+			WantErr: true,
+			ErrIdx:  1,
+			ErrType: rte.ErrTypeConflictingRoutes,
+			ErrMsg:  `route 1 "GET /foo/bar": conflicting routes: "GET /foo/*", "GET /foo/bar"`,
+		},
+		{
+			Name: "conflicting routes deep nested",
+			Routes: rte.Routes(
+				"GET /foo/:foo_id/far/fee", func(http.ResponseWriter, *http.Request) {},
+				// force partitions later on
+				"GET /foo/:foo_id/far/fed", func(http.ResponseWriter, *http.Request) {},
+				"GET /foo/bar", func(http.ResponseWriter, *http.Request) {},
+			),
+			WantErr: true,
+			ErrIdx:  2,
+			ErrType: rte.ErrTypeConflictingRoutes,
+			ErrMsg: `route 2 "GET /foo/bar": conflicting routes: "GET /foo/*/far/fed", "GET /foo/*/far/fee", ` +
+				`"GET /foo/bar"`,
+		},
+		{
+			Name: "different methods no conflict",
+			Routes: rte.Routes(
+				"PUT /foo/:foo_id", func(http.ResponseWriter, *http.Request) {},
+				"GET /foo/bar", func(http.ResponseWriter, *http.Request) {},
+			),
+		},
 	} {
 		t.Run(c.Name, func(t *testing.T) {
 			defer func() {
@@ -164,27 +202,16 @@ func TestNew(t *testing.T) {
 				t.Fatalf("want err %v, got %v", c.WantErr, err)
 			}
 			if c.WantErr {
-				e, ok := err.(rte.Error)
+				e, ok := err.(*rte.TableError)
 				switch {
 				case !ok:
-					t.Fatalf("expected a rte.Error, got %T: %v", err, err)
+					t.Fatalf("expected a rte.TableError, got %T: %v", err, err)
 				case e.Type != c.ErrType:
 					t.Fatalf("expected error type %v, but got %v", c, e)
 				case e.Idx != c.ErrIdx:
 					t.Fatalf("expected error to occur with route %v, but got route %v", c.ErrIdx, e.Idx)
 				case e.Error() != c.ErrMsg:
 					t.Fatalf("expected error message %v, but got %v", c.ErrMsg, e.Error())
-				}
-
-				if c.CauseMsg != "" {
-					causeMsg := ""
-					if e.Cause() != nil {
-						causeMsg = e.Cause().Error()
-					}
-
-					if c.CauseMsg != causeMsg {
-						t.Fatalf("wanted %q as a cause but got %q", c.CauseMsg, causeMsg)
-					}
 				}
 			}
 		})
@@ -224,7 +251,7 @@ func TestMust(t *testing.T) {
 	}
 }
 
-func Test_matchPath(t *testing.T) {
+func TestMatching(t *testing.T) {
 	h200 := func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(nil)
 	}
@@ -316,18 +343,6 @@ func Test_matchPath(t *testing.T) {
 			),
 			code: 405, body: `["abc","123"]`,
 		},
-		{
-			req: httptest.NewRequest("GET", "/abc/123", nil),
-			rte: rte.Routes(
-				rte.MethodAny+" /:foo/:bar",
-				func(w http.ResponseWriter, r *http.Request, foo, bar string) {
-					w.WriteHeader(http.StatusMethodNotAllowed)
-					_ = json.NewEncoder(w).Encode([]string{foo, bar})
-				},
-			),
-			code: 405, body: `["abc","123"]`,
-		},
-
 		// multi route
 		{
 			req: httptest.NewRequest("GET", "/abc/123", nil),
@@ -340,29 +355,6 @@ func Test_matchPath(t *testing.T) {
 				"GET /abc", h200,
 			),
 			code: http.StatusAccepted, body: `["123"]`,
-		},
-		{
-			name: "wildcard margin",
-			req:  httptest.NewRequest("GET", "/foo/g", nil),
-			rte: rte.Routes(
-				"GET /foo/bar/baz", h200,
-				"GET /foo/:foo_id", func(w http.ResponseWriter, r *http.Request, fooID string) {
-					_ = json.NewEncoder(w).Encode([]string{fooID})
-				},
-			),
-			code: 200, body: `["g"]`,
-		},
-		{
-			name:       "wildcard shadowing",
-			skipReason: "knowon failure",
-			req:        httptest.NewRequest("GET", "/foo/bar", nil),
-			rte: rte.Routes(
-				"GET /foo/bar/baz", h200,
-				"GET /foo/:foo_id", func(w http.ResponseWriter, r *http.Request, fooID string) {
-					_ = json.NewEncoder(w).Encode([]string{fooID})
-				},
-			),
-			code: 200, body: `["bar"]`,
 		},
 		{
 			name: "github example",
@@ -390,6 +382,14 @@ func Test_matchPath(t *testing.T) {
 				"GET /users/:user/events/orgs/:org", h200,
 			),
 			code: 200, body: "blah",
+		},
+		{
+			name: "method any is refused",
+			req:  httptest.NewRequest(rte.MethodAny, "/", nil),
+			rte: rte.Routes(
+				rte.MethodAny+" /", func(http.ResponseWriter, *http.Request) {},
+			),
+			code: 404, body: "404",
 		},
 	}
 
