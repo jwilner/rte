@@ -21,7 +21,7 @@ import (
 // - Route
 // - []Route
 // - "PATH", []Route (identical to rte.Prefix("PATH", routes))
-// - "PATH", []Route, middleware (identical to rte.GlobalMiddleware(rte.Prefix("PATH", routes), middleware))
+// - "PATH", []Route, middleware (identical to rte.Wrap(rte.Prefix("PATH", routes), middleware))
 func Routes(is ...interface{}) []Route {
 	var routes []Route
 
@@ -94,7 +94,7 @@ func Routes(is ...interface{}) []Route {
 
 		if idxMW := idxHandler + 1; idxMW < len(is) {
 			if mw, ok := is[idxMW].(Middleware); ok {
-				routes = append(routes, GlobalMiddleware(mw, newRoutes)...)
+				routes = append(routes, Wrap(mw, newRoutes)...)
 				idxReqLine = idxMW + 1
 				continue
 			}
@@ -203,27 +203,57 @@ func DefaultMethod(hndlr interface{}, routes []Route) []Route {
 	return copied
 }
 
-// GlobalMiddleware registers a middleware across all provide routes. If a middleware is already set,
-// that middleware will be invoked second.
-func GlobalMiddleware(mw Middleware, routes []Route) []Route {
+// Wrap registers a middleware across all provide routes. If a middleware is already set, that middleware will be
+// invoked second.
+func Wrap(mw Middleware, routes []Route) []Route {
 	var copied []Route
 	for _, r := range routes {
-		r.Middleware = composeMiddleware(mw, r.Middleware)
+		if r.Middleware != nil {
+			r.Middleware = Compose(mw, r.Middleware)
+		} else {
+			r.Middleware = mw
+		}
 		copied = append(copied, r)
 	}
 	return copied
 }
 
-func composeMiddleware(mw1, mw2 Middleware) Middleware {
-	if mw1 == nil {
-		return mw2
+// Compose combines one or more middlewares into a single middleware. The composed middleware will proceed left to right
+// through the middleware (and exit right to left).
+func Compose(mw Middleware, mws ...Middleware) Middleware {
+	mws = append([]Middleware{mw}, mws...)
+	mw = mws[len(mws)-1]
+	for i := len(mws) - 2; i >= 0; i-- {
+		mw1, mw2 := mws[i], mw
+		mw = MiddlewareFunc(func(w http.ResponseWriter, r *http.Request, next http.Handler) {
+			mw1.Handle(w, r, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mw2.Handle(w, r, next)
+			}))
+		})
 	}
-	if mw2 == nil {
-		return mw1
+	return mw
+}
+
+// RecoveryMiddleware returns a middleware which converts any panics into 500 status http errors and stops the panic. If
+// a non-nil log is provided, any panic will be logged.
+func RecoveryMiddleware(log interface{ Println(...interface{}) }) Middleware {
+	if log == nil {
+		return MiddlewareFunc(func(w http.ResponseWriter, r *http.Request, next http.Handler) {
+			defer func() {
+				if p := recover(); p != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			}()
+			next.ServeHTTP(w, r)
+		})
 	}
 	return MiddlewareFunc(func(w http.ResponseWriter, r *http.Request, next http.Handler) {
-		mw1.Handle(w, r, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			mw2.Handle(w, r, next)
-		}))
+		defer func() {
+			if p := recover(); p != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				log.Println(p)
+			}
+		}()
+		next.ServeHTTP(w, r)
 	})
 }

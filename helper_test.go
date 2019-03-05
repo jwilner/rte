@@ -1,8 +1,10 @@
 package rte_test
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/jwilner/rte"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -136,31 +138,13 @@ func (s stringMW) Handle(w http.ResponseWriter, r *http.Request, next http.Handl
 func TestGlobalMiddleware(t *testing.T) {
 	mw1 := mockMW(true)
 	t.Run("empty", func(t *testing.T) {
-		rts := rte.GlobalMiddleware(nil, nil)
+		rts := rte.Wrap(mw1, nil)
 		if len(rts) != 0 {
 			t.Errorf("Wanted no routes returned")
 		}
 	})
-	t.Run("nilPassed", func(t *testing.T) {
-		rts := rte.GlobalMiddleware(nil, []rte.Route{
-			{Method: "GET", Path: "/"},
-		})
-		want := []rte.Route{{Method: "GET", Path: "/"}}
-		if !reflect.DeepEqual(rts, want) {
-			t.Errorf("Wanted %v but got %v", want, rts)
-		}
-	})
-	t.Run("nilPassedMwPresent", func(t *testing.T) {
-		rts := rte.GlobalMiddleware(nil, []rte.Route{
-			{Method: "GET", Path: "/", Middleware: mw1},
-		})
-		want := []rte.Route{{Method: "GET", Path: "/", Middleware: mw1}}
-		if !reflect.DeepEqual(rts, want) {
-			t.Errorf("Wanted %v but got %v", want, rts)
-		}
-	})
 	t.Run("setsMW", func(t *testing.T) {
-		rts := rte.GlobalMiddleware(mw1, []rte.Route{
+		rts := rte.Wrap(mw1, []rte.Route{
 			{Method: "GET", Path: "/"},
 		})
 		want := []rte.Route{{Method: "GET", Path: "/", Middleware: mw1}}
@@ -169,7 +153,7 @@ func TestGlobalMiddleware(t *testing.T) {
 		}
 	})
 	t.Run("composes", func(t *testing.T) {
-		tbl := rte.Must(rte.GlobalMiddleware(stringMW("hi"), []rte.Route{
+		tbl := rte.Must(rte.Wrap(stringMW("hi"), []rte.Route{
 			{
 				Method:     "GET",
 				Path:       "/",
@@ -373,4 +357,77 @@ func TestRoutes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCompose(t *testing.T) {
+	getBody := func(mw rte.Middleware) string {
+		w := httptest.NewRecorder()
+		mw.Handle(
+			w,
+			httptest.NewRequest("GET", "/", nil),
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}),
+		)
+		return w.Body.String()
+	}
+
+	t.Run("one", func(t *testing.T) {
+		if r := getBody(rte.Compose(stringMW("1"))); r != "1\n" {
+			t.Fatalf("Wanted \"1\n\" but got %v", r)
+		}
+	})
+	t.Run("two", func(t *testing.T) {
+		if r := getBody(rte.Compose(stringMW("1"), stringMW("2"))); r != "1\n2\n" {
+			t.Fatalf("Wanted \"1\n2\n\" but got %v", r)
+		}
+	})
+	t.Run("three", func(t *testing.T) {
+		if r := getBody(rte.Compose(stringMW("1"), stringMW("2"), stringMW("3"))); r != "1\n2\n3\n" {
+			t.Fatalf("Wanted \"1\n2\n3\n\" but got %v", r)
+		}
+	})
+}
+
+func TestRecoveryMiddleware(t *testing.T) {
+	panicky := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("whoa")
+	})
+	noPanic := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+
+	getCode := func(mw rte.Middleware, h http.Handler) int {
+		w := httptest.NewRecorder()
+		mw.Handle(w, httptest.NewRequest("GET", "/", nil), h)
+		return w.Code
+	}
+
+	t.Run("nilNone", func(t *testing.T) {
+		if code := getCode(rte.RecoveryMiddleware(nil), noPanic); code != 200 {
+			t.Fatalf("Expected 200 but got %v", code)
+		}
+	})
+
+	t.Run("nilPanic", func(t *testing.T) {
+		if code := getCode(rte.RecoveryMiddleware(nil), panicky); code != 500 {
+			t.Fatalf("Expected 500 but got %v", code)
+		}
+	})
+
+	t.Run("logNone", func(t *testing.T) {
+		var buf bytes.Buffer
+		if code := getCode(rte.RecoveryMiddleware(log.New(&buf, "", 0)), noPanic); code != 200 {
+			t.Fatalf("Expected 200 but got %v", code)
+		}
+		if buf.Len() != 0 {
+			t.Fatalf("Expected no bytes written but got %q", buf.String())
+		}
+	})
+
+	t.Run("logPanic", func(t *testing.T) {
+		var buf bytes.Buffer
+		if code := getCode(rte.RecoveryMiddleware(log.New(&buf, "", 0)), panicky); code != 500 {
+			t.Fatalf("Expected 500 but got %v", code)
+		}
+		if buf.String() != "whoa\n" {
+			t.Fatalf("Expected \"whoa\n\" written but got %q", buf.String())
+		}
+	})
 }

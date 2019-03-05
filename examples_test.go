@@ -257,13 +257,13 @@ func ExampleDefaultMethod() {
 	// PRETEND /foo not allowed
 }
 
-func ExampleGlobalMiddleware() {
+func ExampleWrap() {
 	// applied to the one
 	m1 := stringMW("and this is m1")
 	// applied to both
 	m2 := stringMW("this is m2")
 
-	tbl := rte.Must(rte.GlobalMiddleware(m2, rte.Routes(
+	tbl := rte.Must(rte.Wrap(m2, rte.Routes(
 		"GET /", func(w http.ResponseWriter, r *http.Request) {
 			_, _ = fmt.Fprintf(w, "handling GET /\n")
 		}, m1,
