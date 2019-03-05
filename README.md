@@ -40,6 +40,9 @@ func main() {
                 rte.MethodAny, func(w http.ResponseWriter, r *http.Request, id string) {
                     // serve a 405
                 },
+                "POST /bar", func(w http.ResponseWriter, r *http.Request, id string) {
+                    // POST /foo/:id/bar
+                },
             ),
         ),
     ))))
