@@ -5,7 +5,7 @@
 [![GoDoc](https://godoc.org/github.com/jwilner/rte?status.svg)](https://godoc.org/github.com/jwilner/rte)
 [![Coverage Status](https://coveralls.io/repos/github/jwilner/rte/badge.svg?branch=coverage)](https://coveralls.io/github/jwilner/rte?branch=coverage)
 
-Dead simple, opinionated, performant routing.
+Simple, opinionated, performant routing.
 
 - Intuitive, legible interface; encourages treating routing configuration as data to be passed around and manipulated.
 - Extracted path variables are matched to type signature; handlers get to business logic faster, code is more explicit, and programming errors are surfaced before request handling time.
@@ -233,61 +233,63 @@ Check out the [go docs](https://godoc.org/github.com/jwilner/rte) for still more
 
 ## Trade-offs
 
-It's important to note that RTE uses a fixed size array of strings for path variables paired with generated code to avoid heap allocations; currently, this number is fixed at 8, which means that **RTE does not support routes with more than eight path variables** (doing so will cause an error or panic). The author is deeply skeptical that anyone actually really needs more than eight path variables; that said, it's a design goal to provide support higher numbers once the right packaging technique is found.
+It's important to note that RTE uses a fixed size array of strings for path variables paired with generated code to avoid heap allocations; currently, this number is fixed at 8, which means that **RTE does not support routes with more than eight path variables** (doing so will cause an error or panic). The author is deeply skeptical that anyone actually really needs more than eight path variables; that said, it's a design goal to provide support for higher numbers once the right packaging technique is found.
 
 ## Performance
 
 Modern Go routers place a lot of emphasis on speed. There's plenty of room for skepticism about this attitude, as most web application will be IO bound. Nonetheless, this is the barrier for entry to the space these days. To this end, RTE completely avoids performing zero heap allocations while serving requests and uses a relatively optimized data structure (a compressed trie) to route requests.
 
-Numbers are drawn from this [fork](https://github.com/jwilner/go-http-routing-benchmark) of [go-http-routing-benchmark](https://github.com/julienschmidt/go-http-routing-benchmark) (which appears unmaintained). The numbers below are from a 2013 MB Pro with a 2.6 GHz i5 and 8 GB ram. The top five results for each are shown.
+Benchmarks are drawn from this [fork](https://github.com/jwilner/go-http-routing-benchmark) of [go-http-routing-benchmark](https://github.com/julienschmidt/go-http-routing-benchmark) (which appears unmaintained). The benchmarks were run on a 2013 MB Pro with a 2.6 GHz i5 and 8 GB ram. For fun, RTE is compared to some of the most popular Go router layers below.
 
-|Single Param Micro Benchmark| | | | |
+| Single Param Micro Benchmark| Reps | ns/op | B/op | allocs/op |
 |---|---|---|---|---|
-|**RTE**|20000000|69.1 ns/op|0 B/op|0 allocs/op|
-|Gin|20000000|86.0 ns/op|0 B/op|0 allocs/op|
-|LARS|20000000|90.0 ns/op|0 B/op|0 allocs/op|
-|Echo|20000000|107 ns/op|0 B/op|0 allocs/op|
-|HttpRouter|10000000|139 ns/op|32 B/op|1 allocs/op
+| **RTE** | 20000000 | 64.0 | 0 | 0 |
+| Gin | 20000000 | 79.4 | 0 | 0 |
+| Echo | 20000000 | 105 | 0 | 0 |
+| HttpRouter | 10000000 | 138 | 32 | 1 |
+| Beego | 1000000 | 1744 | 352 | 3 |
+| GorillaMux | 300000 | 3775 | 1280 | 10 |
+| Martini | 200000 | 6891 | 1072 | 10 |
 
-|Google Plus API with 1 Param | | | | |
+| Five Param Micro Benchmark | Reps | ns/op | B/op | allocs/op |
 |---|---|---|---|---|
-|**RTE**|20000000|101 ns/op|0 B/op|0 allocs/op|
-|LARS|10000000|116 ns/op|0 B/op|0 allocs/op|
-|Gin|20000000|123 ns/op|0 B/op|0 allocs/op|
-|Echo|10000000|153 ns/op|0 B/op|0 allocs/op|
-|HttpRouter|10000000|239 ns/op|64 B/op|1 allocs/op|
+| **RTE** | 20000000 | 116 | 0 | 0 |
+| Gin | 10000000 | 137 | 0 | 0 |
+| Echo | 5000000 | 253 | 0 | 0 |
+| HttpRouter | 3000000 | 416 | 160 | 1 |
+| Beego | 1000000 | 2036 | 352 | 3 |
+| GorillaMux | 300000 | 5194 | 1344 | 10 |
+| Martini | 200000 | 8091 | 1232 | 11 |
 
-|Five Param Micro Benchmark | | | | |
+| Github API with 1 Param | Reps | ns/op | B/op | allocs/op |
 |---|---|---|---|---|
-|**RTE**|10000000|119 ns/op|0 B/op|0 allocs/op|
-|LARS|10000000|153 ns/op|0 B/op|0 allocs/op|
-|Gin|10000000|179 ns/op|0 B/op|0 allocs/op|
-|Echo|5000000|319 ns/op|0 B/op|0 allocs/op|
-|HttpRouter|3000000|445 ns/op|160 B/op|1 allocs/op|
+| **RTE** | 10000000 | 156 | 0 | 0 |
+| Gin | 10000000 | 184 | 0 | 0 |
+| Echo | 5000000 | 266 | 0 | 0 |
+| HttpRouter | 5000000 | 296 | 96 | 1 |
+| Beego | 1000000 | 2018 | 352 | 3 |
+| GorillaMux | 200000 | 10949 | 1296 | 10 |
+| Martini | 100000 | 14957 | 1152 | 11 |
 
-|Google Plus API with 2 Params| | | | |
+| Google Plus API with 1 Param | Reps | ns/op | B/op | allocs/op |
 |---|---|---|---|---|
-|LARS|10000000|149 ns/op|0 B/op|0 allocs/op|
-|**RTE**|10000000|153 ns/op|0 B/op|0 allocs/op|
-|Gin|10000000|164 ns/op|0 B/op|0 allocs/op|
-|Echo|10000000|252 ns/op|0 B/op|0 allocs/op|
-|HttpRouter|5000000|271 ns/op|64 B/op|1 allocs/op|
+| **RTE** | 20000000 | 89.1 | 0 | 0 |
+| Gin | 20000000 | 123 | 0 | 0 |
+| Echo | 10000000 | 143 | 0 | 0 |
+| HttpRouter | 10000000 | 185 | 64 | 1 |
+| Beego | 1000000 | 1488 | 352 | 3 |
+| GorillaMux | 300000 | 4053 | 1280 | 10 |
+| Martini | 200000 | 6375 | 1072 | 10 |
 
-|Github API Single Param | | | | |
+| Google Plus API with 2 Params | Reps | ns/op | B/op | allocs/op |
 |---|---|---|---|---|
-|**RTE**|10000000|152 ns/op|0 B/op|0 allocs/op|
-|LARS|10000000|181 ns/op|0 B/op|0 allocs/op|
-|Gin|10000000|192 ns/op|0 B/op|0 allocs/op|
-|Echo|5000000|307 ns/op|0 B/op|0 allocs/op|
-|HttpRouter|5000000|337 ns/op|96 B/op|1 allocs/op|
-
-|Github API All | | | | |
-|---|---|---|---|---|
-|**RTE**|50000|32830 ns/op|0 B/op|0 allocs/op|
-|LARS|50000|34791 ns/op|0 B/op|0 allocs/op|
-|Gin|50000|38353 ns/op|0 B/op|0 allocs/op|
-|HttpRouter|20000|58992 ns/op|13792 B/op|167 allocs/op|
-|Echo|20000|91093 ns/op|0 B/op|0 allocs/op|
+| **RTE** | 10000000 | 139 | 0 | 0 |
+| Gin | 10000000 | 141 | 0 | 0 |
+| HttpRouter | 5000000 | 225 | 64 | 1 |
+| Echo | 10000000 | 237 | 0 | 0 |
+| Beego | 1000000 | 1646 | 352 | 3 |
+| GorillaMux | 200000 | 8675 | 1296 | 10 |
+| Martini | 100000 | 13586 | 1200 | 13 |
 
 ## Design principles
 
@@ -299,9 +301,9 @@ Additionally, RTE aims to have defined behavior in all circumstances and to docu
 
 ### limiting state space
 
-Many modern routers coordinate by mutating a common data structure -- unsurprisingly, usually called a `Router`. In larger applications that pass around the routers and subrouters, setting different flags and options in different locations, the state of the router can be at best hard to reason about and at worst undefined -- it is not uncommon for certain feature combinations to fail or have unexpected (or insecure) results.
+Many modern routers coordinate by mutating a common data structure -- unsurprisingly, usually called a `Router`. In larger applications that pass around the routers and subrouters, setting different flags and options in different locations, the state of the router can be at best hard to reason about and at worst undefined -- it is not uncommon for certain feature combinations to fail or have unexpected results.
 
-By centering on the simple `rte.Route` and not exposing any mutable state, RTE keeps its interface simple to understand, while also simplifying its own internals . Because most routing libraries focus on the mutable router object, they do not have explicit finalization, and thus their internal logic must remain open to modification at any time -- RTE does not have this problem, and benefits.
+By centering on the simple `rte.Route` and not exposing any mutable state, RTE keeps its interface simple to understand, while also simplifying its own internals. Because most routing libraries focus on the mutable router object, they do not have explicit finalization, and thus their internal logic must remain open to modification at any time -- RTE does not have this problem.
 
 When a routing feature is necessary, it will usually be added as an helper method orthogonal to the rest of the API. For example, rather than providing a method `OptTrailingSlash(enabled bool)` on `*rte.Table` and pushing complexity into the routing logic, RTE provides the pure function `rte.OptTrailingSlash(routes []rte.Route) []rte.Route`, which adds the new `rte.Route`s necessary to optionally match trailing slashes, while the routing logic remains unchanged.
 
