@@ -38,7 +38,7 @@ func main() {
                     // DELETE /foo/:id
                 },
                 rte.MethodAny, func(w http.ResponseWriter, r *http.Request, id string) {
-                    // serve a 405
+                    // Match any other HTTP method on /foo/:id (e.g. to serve a 405)
                 },
                 "POST /bar", func(w http.ResponseWriter, r *http.Request, id string) {
                     // POST /foo/:id/bar
@@ -239,7 +239,7 @@ It's important to note that RTE uses a fixed size array of strings for path vari
 
 Modern Go routers place a lot of emphasis on speed. There's plenty of room for skepticism about this attitude, as most web application will be IO bound. Nonetheless, this is the barrier for entry to the space these days. To this end, RTE completely avoids performing zero heap allocations while serving requests and uses a relatively optimized data structure (a compressed trie) to route requests.
 
-Numbers are drawn from this [fork](https://github.com/jwilner/go-http-routing-benchmark) of [go-http-routing-benchmark](https://github.com/julienschmidt/go-http-routing-benchmark) (which appears unmaintained). The numbers below are from a 2013 MB Pro with a 2.6 GHz i5 and 8 GB ram.
+Numbers are drawn from this [fork](https://github.com/jwilner/go-http-routing-benchmark) of [go-http-routing-benchmark](https://github.com/julienschmidt/go-http-routing-benchmark) (which appears unmaintained). The numbers below are from a 2013 MB Pro with a 2.6 GHz i5 and 8 GB ram. The top five results for each are shown.
 
 |Single Param Micro Benchmark| | | | |
 |---|---|---|---|---|
