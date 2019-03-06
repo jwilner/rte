@@ -9,7 +9,7 @@ Dead simple, opinionated, performant routing.
 
 - Intuitive, legible interface; encourages treating routing configuration as data to be passed around and manipulated.
 - Extracted path variables are matched to type signature; handlers get to business logic faster, code is more explicit, and programming errors are surfaced before request handling time.
-- Fast AF -- completely avoids the heap during request handling; markedly faster than any other router in the go-http-routing-benchmark suite.
+- Fast AF -- completely avoids the heap during request handling; markedly faster than any other router in the [go-http-routing-benchmark suite](#performance).
 
 ```go
 package main
@@ -50,7 +50,7 @@ func main() {
 ```
 ## Usage
 
-`rte.Route` values are passed to `rte.Must` or `rte.New`, which constructs an `*rte.Table`.
+`rte.Route` values are passed to `rte.Must` or `rte.New`, which constructs an `*rte.Table`. There are plenty of examples here, but also check out the [go docs](https://godoc.org/github.com/jwilner/rte#pkg-examples).
 
 ### rte.Route
 
@@ -132,7 +132,7 @@ routes := []rte.Route {
 }
 ```
 
-See [examples_test.go](examples_test.go) for more examples.
+See [examples_test.go](examples_test.go) or [go docs](https://godoc.org/github.com/jwilner/rte#example-Routes) for more examples.
 
 ### Compiling the routing table
 
@@ -145,6 +145,91 @@ tbl = rte.Must(routes) // panics on misconfiguration
 If you're dynamically constructing your routes, the returned `rte.Error` type helps you recover from misconfiguration.
 
 `*rte.Table` satisfies the standard `http.Handler` interface and can be used with standard Go http utilities.
+
+### Extras
+
+RTE provides a few basic values and functions to help with common patterns. Many of these functions take in a `[]Route` and return a new, potentially modified `[]Route`, in keeping with the [design principles](#design-principles).
+
+#### MethodAny
+
+RTE performs wildcard matching in paths with the `:` syntax; it can also perform wildcard matching of methods via the use of `rte.MethodAny`. You can use `rte.MethodAny` anywhere you would a normal HTTP method; it will match any requests to the path that don't match an explicit, static method:
+
+```go
+rte.Routes(
+    // handles GETs to /
+    "GET /", func(http.ResponseWriter, *http.Request){},
+    // handles POST PUT, OPTIONS, etc. to /
+    rte.MethodAny+" /", func(http.ResponseWriter, *http.Request){},
+)
+```
+
+#### DefaultMethod
+
+`rte.DefaultMethod` adds a `rte.MethodAny` handler to every path; useful if you want to serve 405s for all routes.
+
+```go
+reflect.DeepEqual(
+    rte.DefaultMethod(
+        hndlr405,
+        []rte.Route {
+            {Method: "GET", Path: "/foo", Handler: fooHandler},
+            {Method: "POST", Path: "/foo", Handler: postFooHandler},
+            {Method: "GET", Path: "/bar", Handler: barHandler},
+        },
+    ),
+    []rte.Route {
+        {Method: "GET", Path: "/foo", Handler: fooHandler},
+        {Method: rte.MethodAny, Path: "/foo", Handler: hndlr405},
+        {Method: "POST", Path: "/foo", Handler: postFooHandler},
+        {Method: "GET", Path: "/bar", Handler: barHandler},
+        {Method: rte.MethodAny, Path: "/bar", Handler: hnldr405},
+    },
+)
+```
+
+#### Wrap
+
+`rte.Wrap` adds middleware behavior to every contained path; if a middleware is already set, the new middleware will be wrapped around it -- so that the stack will have the new middleware at the top, the old middleware in the middle, and the handler at the bottom.
+
+```go
+reflect.DeepEqual(
+    rte.Wrap(
+        myMiddleware,
+        []rte.Route {
+            {Method: "GET", Path: "/foo", Handler: myHandler},
+        },
+    ),
+    []rte.Route {
+        {Method: "GET", Path: "/foo", Handler: myHandler, Middleware: myMiddleware},
+    },
+)
+```
+
+#### OptTrailingSlash
+
+OptTrailingSlash makes each handler also match its slashed or not-slashed version.
+
+```go
+reflect.DeepEqual(
+    rte.OptTrailingSlash(
+        []rte.Route {
+            {Method: "GET", Path: "/foo", Handler: myHandler},
+            {Method: "POST", Path: "/bar/", Handler: barHandler},
+        },
+    ),
+    []rte.Route {
+        {Method: "GET", Path: "/foo", Handler: myHandler},
+        {Method: "GET", Path: "/foo/", Handler: myHandler},
+        {Method: "POST", Path: "/bar/", Handler: barHandler},
+        {Method: "POST", Path: "/bar", Handler: barHandler},
+    },
+)
+```
+
+#### more
+
+Check out the [go docs](https://godoc.org/github.com/jwilner/rte) for still more extras.
+
 
 ## Trade-offs
 
