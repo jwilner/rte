@@ -342,9 +342,10 @@ func (t *Table) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h(w, r, variables)
 			return
 		}
-		// if we've gotten this far, our method mask should guarantee that there's a `MethodAny` handler.
-		node.handler(MethodAny)(w, r, variables)
-		return
+		if h := node.handler(MethodAny); h != nil {
+			h(w, r, variables)
+			return
+		}
 	}
 
 	t.Default.ServeHTTP(w, r)

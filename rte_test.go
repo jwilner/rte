@@ -391,6 +391,15 @@ func TestMatching(t *testing.T) {
 			),
 			code: 404, body: "404",
 		},
+		{
+			name: "tricky method",
+			req:  httptest.NewRequest("PUT", "/keys/", nil),
+			rte: rte.Routes(
+				"GET /keys/", func(w http.ResponseWriter, r *http.Request) {},
+				"PUT /keys/:key", func(w http.ResponseWriter, r *http.Request, key string) {},
+			),
+			code: 404, body: "404",
+		},
 	}
 
 	for _, tt := range tests {
