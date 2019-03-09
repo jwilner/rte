@@ -137,9 +137,7 @@ func TestNew(t *testing.T) {
 			Name: "excessively long path",
 			Routes: rte.Routes(
 				"GET "+strings.Repeat("/:whoo", len(funcs.PathVars{})+1),
-				func(w http.ResponseWriter, r *http.Request, _ [8]string) {
-
-				},
+				func(w http.ResponseWriter, r *http.Request) {},
 			),
 			WantErr: true,
 			ErrType: rte.ErrTypeOutOfRange,
