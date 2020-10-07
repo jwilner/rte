@@ -1,9 +1,9 @@
 # rte - routing table extraordinaire
 
-[![Build Status](https://travis-ci.com/jwilner/rte.svg?branch=master)](https://travis-ci.com/jwilner/rte)
-[![Go Report Card](https://goreportcard.com/badge/github.com/jwilner/rte)](https://goreportcard.com/report/github.com/jwilner/rte)
+[![Tests](https://github.com/jwilner/rte/workflows/tests/badge.svg)](https://github.com/jwilner/rte/actions?query=workflow%3Atests+branch%3Amain)
+[![Lint](https://github.com/jwilner/rte/workflows/lint/badge.svg)](https://github.com/jwilner/rte/actions?query=workflow%3Alint+branch%3Amain)
 [![GoDoc](https://godoc.org/github.com/jwilner/rte?status.svg)](https://godoc.org/github.com/jwilner/rte)
-[![Coverage Status](https://coveralls.io/repos/github/jwilner/rte/badge.svg?branch=coverage)](https://coveralls.io/github/jwilner/rte?branch=coverage)
+[![Coverage](https://coveralls.io/repos/github/jwilner/rte/badge.svg?branch=coverage)](https://coveralls.io/github/jwilner/rte?branch=coverage)
 
 Simple, opinionated, performant routing.
 

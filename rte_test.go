@@ -3,14 +3,15 @@ package rte_test
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/jwilner/rte"
-	"github.com/jwilner/rte/internal/funcs"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/jwilner/rte"
+	"github.com/jwilner/rte/internal/funcs"
 )
 
 func TestNew(t *testing.T) {

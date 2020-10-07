@@ -2,9 +2,10 @@ package rte_test
 
 import (
 	"fmt"
-	"github.com/jwilner/rte"
 	"net/http"
 	"net/http/httptest"
+
+	"github.com/jwilner/rte"
 )
 
 func ExampleMiddlewareFunc() {

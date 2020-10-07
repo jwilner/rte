@@ -2,9 +2,10 @@ package rte
 
 import (
 	"fmt"
-	"github.com/jwilner/rte/internal/funcs"
 	"net/http"
 	"strings"
+
+	"github.com/jwilner/rte/internal/funcs"
 )
 
 // Routes is a vanity constructor for constructing literal routing tables. It enforces types at runtime. An invocation
@@ -62,7 +63,7 @@ func Routes(is ...interface{}) []Route {
 		switch v := is[idxHandler].(type) {
 		case []Route:
 			if len(reqLine) == 0 || reqLine[0] != '/' {
-				panic(fmt.Sprintf("rte.Routes: if providing []Route as a target, reqLine must be a prefix"))
+				panic("rte.Routes: if providing []Route as a target, reqLine must be a prefix")
 			}
 			newRoutes = Prefix(reqLine, v)
 		default:

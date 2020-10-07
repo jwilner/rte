@@ -3,12 +3,13 @@ package rte_test
 import (
 	"bytes"
 	"fmt"
-	"github.com/jwilner/rte"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
+
+	"github.com/jwilner/rte"
 )
 
 type mockH bool

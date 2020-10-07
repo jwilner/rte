@@ -5,10 +5,11 @@ package rte
 
 import (
 	"fmt"
-	"github.com/jwilner/rte/internal/funcs"
 	"net/http"
 	"regexp"
 	"strings"
+
+	"github.com/jwilner/rte/internal/funcs"
 )
 
 const (
@@ -324,7 +325,6 @@ func applyMiddleware(h funcs.Handler, mw Middleware) funcs.Handler {
 type Table struct {
 	Default    http.Handler
 	root       *node
-	maxParams  int
 	methods    []string
 	methodMask uint
 }

@@ -1,4 +1,4 @@
-.PHONY: test test-cover bench gen check
+.PHONY: test test-cover bench gen check lint fix
 
 MAX-VARS := 8
 
@@ -19,3 +19,9 @@ gen:
 
 check:
 	devscripts/check.sh ${MAX-VARS}
+
+lint:
+	@golangci-lint run
+
+fix:
+	@golangci-lint run --fix
